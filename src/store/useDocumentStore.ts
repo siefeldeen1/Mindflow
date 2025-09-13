@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { Document, CanvasState } from '@/types';
 import { useAuthStore } from '@/store/useAuthStore';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
 // Session storage helper functions
 const SESSION_STORAGE_KEY = 'temp-document';
 const UNAUTHORIZED_STORAGE_KEY = 'unauthorized-document';
@@ -153,7 +155,7 @@ export const useDocumentStore = create<DocumentStore>()(
                         if (!token) {
                             throw new Error('No authentication token found. Please log in.');
                         }
-                        const response = await fetch('http://localhost:5000/api/documents', {
+                        const response = await fetch(`${API_BASE_URL}/api/documents`, {
                             method: 'POST',
                             headers: {
                                 'Authorization': `Bearer ${token}`,
@@ -217,7 +219,7 @@ export const useDocumentStore = create<DocumentStore>()(
                         if (!token) {
                             throw new Error('No authentication token found. Please log in.');
                         }
-                        const checkResponse = await fetch(`http://localhost:5000/api/documents/${id}`, {
+                        const checkResponse = await fetch(`${API_BASE_URL}/api/documents/${id}`, {
                             method: 'GET',
                             headers: {
                                 'Authorization': `Bearer ${token}`,
@@ -225,7 +227,7 @@ export const useDocumentStore = create<DocumentStore>()(
                             },
                         });
                         if (checkResponse.ok) {
-                            const deleteResponse = await fetch(`http://localhost:5000/api/documents/${id}`, {
+                            const deleteResponse = await fetch(`${API_BASE_URL}/api/documents/${id}`, {
                                 method: 'DELETE',
                                 headers: {
                                     'Authorization': `Bearer ${token}`,
@@ -276,7 +278,7 @@ export const useDocumentStore = create<DocumentStore>()(
                         if (!token) {
                             throw new Error('No authentication token found. Please log in.');
                         }
-                        const checkResponse = await fetch(`http://localhost:5000/api/documents/${activeDocumentId}`, {
+                        const checkResponse = await fetch(`${API_BASE_URL}/api/documents/${activeDocumentId}`, {
                             method: 'GET',
                             headers: {
                                 'Authorization': `Bearer ${token}`,
@@ -284,7 +286,7 @@ export const useDocumentStore = create<DocumentStore>()(
                             },
                         });
                         if (checkResponse.ok) {
-                            const deleteResponse = await fetch(`http://localhost:5000/api/documents/${activeDocumentId}`, {
+                            const deleteResponse = await fetch(`${API_BASE_URL}/api/documents/${activeDocumentId}`, {
                                 method: 'DELETE',
                                 headers: {
                                     'Authorization': `Bearer ${token}`,
@@ -406,7 +408,7 @@ export const useDocumentStore = create<DocumentStore>()(
                             state: validatedState,
                         };
 
-                        const checkResponse = await fetch(`http://localhost:5000/api/documents/${id}`, {
+                        const checkResponse = await fetch(`${API_BASE_URL}/api/documents/${id}`, {
                             method: 'GET',
                             headers: {
                                 'Authorization': `Bearer ${token}`,
@@ -423,7 +425,7 @@ export const useDocumentStore = create<DocumentStore>()(
                             const errorData = await checkResponse.json();
                             throw new Error(errorData.error || 'Failed to check document existence');
                         }
-                        const response = await fetch('http://localhost:5000/api/documents', {
+                        const response = await fetch(`${API_BASE_URL}/api/documents`, {
                             method,
                             headers: {
                                 'Authorization': `Bearer ${token}`,
@@ -469,7 +471,7 @@ export const useDocumentStore = create<DocumentStore>()(
                             get().reset();
                             return;
                         }
-                        const response = await fetch('http://localhost:5000/api/documents', {
+                        const response = await fetch(`${API_BASE_URL}/api/documents`, {
                             method: 'GET',
                             headers: {
                                 'Authorization': `Bearer ${token}`,
@@ -623,7 +625,7 @@ export const useDocumentStore = create<DocumentStore>()(
                             state: validatedState,
                         };
 
-                        const checkResponse = await fetch(`http://localhost:5000/api/documents/${unauthorizedDoc.id}`, {
+                        const checkResponse = await fetch(`${API_BASE_URL}/api/documents/${unauthorizedDoc.id}`, {
                             method: 'GET',
                             headers: {
                                 'Authorization': `Bearer ${token}`,
@@ -638,7 +640,7 @@ export const useDocumentStore = create<DocumentStore>()(
                             const errorData = await checkResponse.json();
                             throw new Error(errorData.error || 'Failed to check document existence');
                         }
-                        const response = await fetch('http://localhost:5000/api/documents', {
+                        const response = await fetch(`${API_BASE_URL}/api/documents`, {
                             method,
                             headers: {
                                 'Authorization': `Bearer ${token}`,
