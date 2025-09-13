@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Mind Map Editor Design System */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 259 94% 51%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 259 94% 51%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 259 94% 51%;
+
+    --radius: 0.5rem;
+
+    /* Canvas specific colors */
+    --canvas-bg: 250 14% 98%;
+    --canvas-grid: 0, 100%, 0%; /* Subtle blue-gray for grid */
+    --node-stroke: 220 13% 50%; /* Darker blue-gray for node outline */
+    --node-fill: 0 0% 95%; /* Light gray for node fill */
+    --connection-line: 0 0% 0%;
+    --selection-box: 259 94% 51%;
+    --resize-handle-fill: 0 0% 100%; /* White for resize handle fill */
+    --resize-handle-stroke: 259 94% 51%; /* Primary color for resize handle stroke */
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(259 94% 51%), hsl(259 94% 61%));
+    --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 96%));
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(220 13% 69% / 0.1);
+    --shadow-md: 0 4px 6px -1px hsl(220 13% 69% / 0.1), 0 2px 4px -1px hsl(220 13% 69% / 0.06);
+    --shadow-lg: 0 10px 15px -3px hsl(220 13% 69% / 0.1), 0 4px 6px -2px hsl(220 13% 69% / 0.05);
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 95%;
+
+    --card: 0 0% 9%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 0 0% 9%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 213 94% 68%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 64%;
+
+    --accent: 213 94% 68%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
+    --ring: 213 94% 68%;
+
+    /* Canvas specific colors */
+    --canvas-bg: 0 0% 6%;
+    --canvas-grid: 0 0% 25%; /* Lighter gray for dark mode grid */
+    --node-stroke: 0 0% 75%; /* Light gray for node outline */
+    --node-fill: 0 0% 15%; /* Darker gray for node fill */
+    --connection-line: 0 0% 70%;
+    --selection-box: 213 94% 68%;
+    --resize-handle-fill: 0 0% 20%; /* Dark gray for resize handle fill */
+    --resize-handle-stroke: 213 94% 68%; /* Primary color for resize handle stroke */
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(213 94% 68%), hsl(213 94% 78%));
+    --gradient-surface: linear-gradient(180deg, hsl(0 0% 9%), hsl(0 0% 6%));
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1), 0 2px 4px -2px hsl(0 0% 0% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1), 0 4px 6px -4px hsl(0 0% 0% / 0.1);
+  }
+
+  /* Mobile view adjustments */
+  @media (max-width: 640px) {
+    .property-panel-mobile {
+      width: 80vw !important; /* Use 80% of viewport width instead of full screen */
+      max-width: 300px; /* Cap the width to prevent it from being too wide */
+    }
+    .site-title {
+      font-size: 1rem !important; /* Reduce to 16px on mobile */
+      line-height: 1.5rem;
+    }
+  }
+
+  /* Tablet screens (640px - 1024px) */
+  @media (min-width: 640px) and (max-width: 1024px) {
+    .property-panel-container {
+      display: none; /* Hidden by default, toggled by floating button */
+    }
+    .property-panel-mobile {
+      width: 80vw !important;
+      max-width: 320px;
+    }
+  }
+
+  /* Smaller laptops (1024px - 1280px) */
+  @media (min-width: 1024px) and (max-width: 1280px) {
+    .property-panel-container {
+      display: block !important; /* Always visible like normal view */
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground overflow-x-hidden;
+  }
+}

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MindFlow</title>
+  <meta name="description"
+    content="Create mind maps and flowcharts online. Add shapes, type inside them, and connect everything to organize ideas, plan projects, and map processes. " />
+
+  <meta property="og:title" content="MindFlow" />
+  <meta property="og:description"
+    content="Create mind maps and flowcharts online. Add shapes, type inside them, and connect everything to organize ideas, plan projects, and map processes." />
+  <meta property="og:type" content="website" />
+
+  <!-- Dependencies for development -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/zustand@4.4.1/umd/index.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            background: 'hsl(var(--background))',
+            foreground: 'hsl(var(--foreground))',
+            card: 'hsl(var(--card))',
+            'card-foreground': 'hsl(var(--card-foreground))',
+            primary: 'hsl(var(--primary))',
+            'primary-foreground': 'hsl(var(--primary-foreground))',
+            muted: 'hsl(var(--muted))',
+            'muted-foreground': 'hsl(var(--muted-foreground))',
+            border: 'hsl(var(--border))',
+            'canvas-bg': 'hsl(var(--canvas-bg))',
+            'canvas-grid': 'hsl(var(--canvas-grid))',
+            'selection-box': 'hsl(var(--selection-box))',
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
