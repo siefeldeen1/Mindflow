@@ -391,7 +391,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
       <div className="flex-1" />
 
       <div className="flex items-center gap-2">
-        <AuthDialog />
+        {/* <AuthDialog /> */}
         <Button
           variant="destructive"
           size="sm"
