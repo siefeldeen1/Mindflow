@@ -329,7 +329,7 @@ useEffect(() => {
                     required
                   />
                 </div>
-                {auth && (
+                {/* {auth && (
                   <Button
                     type="button"
                     variant="outline"
@@ -339,7 +339,7 @@ useEffect(() => {
                   >
                     Sign in with Google
                   </Button>
-                )}
+                )} */}
                 {error && (
                   <p className="text-sm text-destructive">{error}</p>
                 )}
@@ -402,7 +402,7 @@ useEffect(() => {
                     required
                   />
                 </div>
-                {auth && (
+                {/* {auth && (
                   <Button
                     type="button"
                     variant="outline"
@@ -412,7 +412,7 @@ useEffect(() => {
                   >
                     Sign in with Google
                   </Button>
-                )}
+                )} */}
                 {error && (
                   <p className="text-sm text-destructive">{error}</p>
                 )}
