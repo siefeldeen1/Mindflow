@@ -42,9 +42,11 @@
     --node-fill: 0 0% 95%; /* Light gray for node fill */
     --connection-line: 0 0% 0%;
     --selection-box: 259 94% 51%;
-    --resize-handle-fill: 0 0% 100%; /* White for resize handle fill */
-    --resize-handle-stroke: 259 94% 51%; /* Primary color for resize handle stroke */
-    
+    --resize-handle-fill: 0 0% 0%; /* White for resize handle fill */
+    --resize-handle-stroke: 0 0% 20%; /* Primary color for resize handle stroke */
+    --connection-point: 259 94% 51%;
+    --cursor-color: 259 94% 45%;
+
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(259 94% 51%), hsl(259 94% 61%));
     --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 96%));
@@ -91,9 +93,10 @@
     --node-fill: 0 0% 15%; /* Darker gray for node fill */
     --connection-line: 0 0% 70%;
     --selection-box: 213 94% 68%;
-    --resize-handle-fill: 0 0% 20%; /* Dark gray for resize handle fill */
+    --resize-handle-fill:  0 0% 100%; /* Dark gray for resize handle fill */
     --resize-handle-stroke: 213 94% 68%; /* Primary color for resize handle stroke */
-    
+    --connection-point: 213 94% 68%;
+    --cursor-color: 259 94% 45%;
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(213 94% 68%), hsl(213 94% 78%));
     --gradient-surface: linear-gradient(180deg, hsl(0 0% 9%), hsl(0 0% 6%));

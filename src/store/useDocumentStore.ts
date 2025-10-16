@@ -1,3 +1,4 @@
+import { debounce } from 'lodash';
 // useDocumentStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -83,11 +84,57 @@ interface DocumentStore {
     reset: () => void;
     updateDocumentState: (id: string, state: Partial<CanvasState>) => void;
     syncUnauthorizedDocument: () => Promise<void>;
+    isAutoSaving: boolean;
 }
 
 export const useDocumentStore = create<DocumentStore>()(
     persist(
         (set, get) => {
+            const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<any> => {
+                const token = useAuthStore.getState().token;
+                const headers = {
+                    ...options.headers,
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                };
+
+                const response = await fetch(url, { ...options, headers });
+
+                if (response.status === 401) {
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch {
+                        errorData = { error: 'Unauthorized' };
+                    }
+                    if (errorData.error === 'Token expired') {
+                        useAuthStore.getState().logout();
+                        // Refresh the frontend by reloading the page
+                        window.location.reload();
+                    }
+                    throw new Error(errorData.error || 'Unauthorized');
+                }
+
+                if (!response.ok) {
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch {
+                        errorData = { error: 'Request failed' };
+                    }
+                    throw new Error(errorData.error || 'Request failed');
+                }
+
+                return response.json();
+            };
+            const fetchDocument = async (id: string) => {
+                try {
+                    return await fetchWithAuth(`${API_BASE_URL}/api/documents/${id}`, { method: 'GET' });
+                } catch (error) {
+                    console.error('Error fetching document:', error);
+                    return null;
+                }
+            };
             const initialDocId = uuidv4();
             let defaultDocument: Document = {
                 id: initialDocId,
@@ -108,7 +155,42 @@ export const useDocumentStore = create<DocumentStore>()(
                     selectionBox: null,
                 },
             };
-
+            const debouncedAutoSave = debounce((id: string) => { // Added debounced autosave function to batch saves
+                const state = get();
+                set({ isAutoSaving: true }); // Set autosaving state to show icon
+                if (!useAuthStore.getState().isAuthenticated) {
+                    const doc = state.documents.find((d) => d.id === id);
+                    if (doc) {
+                        saveTempDocumentToSession(doc); // Save to session storage for unauthenticated users
+                        saveUnauthorizedDocument(doc); // Save to local storage for unauthenticated users
+                        const newNodes = doc.state.nodes || [];
+                        const newEdges = doc.state.edges || [];
+                        set({
+                            unsavedChanges: state.unsavedChanges.filter((docId) => docId !== id),
+                            lastSavedState: {
+                                ...state.lastSavedState,
+                                [id]: {
+                                    nodes: JSON.parse(JSON.stringify(newNodes)),
+                                    edges: JSON.parse(JSON.stringify(newEdges)),
+                                },
+                            },
+                            isAutoSaving: false, // Reset autosaving state after save
+                        });
+                    } else {
+                        set({ isAutoSaving: false }); // Reset if no document found
+                    }
+                } else {
+                    const fullState = state.documents.find((d) => d.id === id)?.state;
+                    if (fullState) {
+                        state.saveDocument(id, fullState).catch((error) => {
+                            console.error('Auto-save failed:', error);
+                            set({ isAutoSaving: false }); // Reset on error
+                        });
+                    } else {
+                        set({ isAutoSaving: false }); // Reset if no state found
+                    }
+                }
+            }, 2000); // 2000ms debounce to batch changes
             // Load temp document from session storage or unauthorized document from local storage
             const tempDoc = loadTempDocumentFromSession();
             const unauthorizedDoc = loadUnauthorizedDocument();
@@ -124,6 +206,7 @@ export const useDocumentStore = create<DocumentStore>()(
                 activeDocumentId: defaultDocument.id,
                 unsavedChanges: tempDoc || unauthorizedDoc ? [defaultDocument.id] : [],
                 lastSavedState: { [defaultDocument.id]: { nodes: [], edges: [] } },
+                isAutoSaving: false,
 
                 addDocument: async () => {
                     const { isAuthenticated } = useAuthStore.getState();
@@ -347,10 +430,23 @@ export const useDocumentStore = create<DocumentStore>()(
                     }));
 
                 },
-
-                setActiveDocument: (id: string) => {
-                    set({ activeDocumentId: id });
-
+                setActiveDocument: async (id: string) => {
+                    const { documents } = get();
+                    if (!documents.some(doc => doc.id === id)) {
+                        console.warn(`Document ID ${id} not found, attempting to fetch`);
+                        const document = await fetchDocument(id);
+                        if (!document) {
+                            console.warn('Document not found, resetting to first document');
+                            set({ activeDocumentId: documents[0]?.id || null });
+                            return;
+                        }
+                        set({
+                            documents: [...documents, document],
+                            activeDocumentId: id,
+                        });
+                    } else {
+                        set({ activeDocumentId: id });
+                    }
                 },
 
                 markUnsaved: (id: string) => {
@@ -367,6 +463,7 @@ export const useDocumentStore = create<DocumentStore>()(
                             ...state.lastSavedState,
                             [id]: { nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) },
                         },
+                        isAutoSaving: false,
                     }));
 
                 },
@@ -378,11 +475,45 @@ export const useDocumentStore = create<DocumentStore>()(
 
                 saveDocument: async (id: string, state: CanvasState) => {
                     const { isAuthenticated } = useAuthStore.getState();
-                    if (!isAuthenticated) {
-
-                        return;
-                    }
                     try {
+                        set({ isAutoSaving: true }); // Set isAutoSaving to show Loader2 icon
+                        if (!isAuthenticated) {
+                            const doc = get().documents.find((d) => d.id === id);
+                            if (doc) {
+                                const validatedState: CanvasState = {
+                                    nodes: Array.isArray(state.nodes) ? state.nodes : [],
+                                    edges: Array.isArray(state.edges) ? state.edges : [],
+                                    selectedNodes: Array.isArray(state.selectedNodes) ? state.selectedNodes : [],
+                                    selectedEdges: Array.isArray(state.selectedEdges) ? state.selectedEdges : [],
+                                    viewport: state.viewport || { x: 0, y: 0, scale: 1 },
+                                    tool: state.tool || 'select',
+                                    isConnecting: state.isConnecting || false,
+                                    connectionSource: state.connectionSource || null,
+                                    history: Array.isArray(state.history) ? state.history : [],
+                                    historyIndex: state.historyIndex || -1,
+                                    isDragging: state.isDragging || false,
+                                    isPanning: state.isPanning || false,
+                                    selectionBox: state.selectionBox || null,
+                                };
+                                const updatedDoc = { ...doc, state: validatedState };
+                                saveTempDocumentToSession(updatedDoc); // Save to session storage for unauthenticated users
+                                saveUnauthorizedDocument(updatedDoc); // Save to local storage for unauthenticated users
+                                set((state) => ({
+                                    documents: state.documents.map((d) => (d.id === id ? updatedDoc : d)),
+                                    unsavedChanges: state.unsavedChanges.filter((docId) => docId !== id),
+                                    lastSavedState: {
+                                        ...state.lastSavedState,
+                                        [id]: {
+                                            nodes: JSON.parse(JSON.stringify(validatedState.nodes)),
+                                            edges: JSON.parse(JSON.stringify(validatedState.edges)),
+                                        },
+                                    },
+                                    isAutoSaving: false, // Reset after save
+                                }));
+                                return; // Exit after handling unauthenticated save
+                            }
+                            throw new Error('Document not found');
+                        }
                         const token = useAuthStore.getState().token;
                         if (!token) {
                             throw new Error('No authentication token found. Please log in.');
@@ -418,10 +549,7 @@ export const useDocumentStore = create<DocumentStore>()(
                         let method = 'POST';
                         if (checkResponse.ok) {
                             method = 'PUT';
-
-                        } else if (checkResponse.status === 404) {
-
-                        } else {
+                        } else if (checkResponse.status !== 404) {
                             const errorData = await checkResponse.json();
                             throw new Error(errorData.error || 'Failed to check document existence');
                         }
@@ -438,33 +566,45 @@ export const useDocumentStore = create<DocumentStore>()(
                             console.error('Backend error response:', errorData);
                             throw new Error(errorData.error || `Failed to save document: ${response.status}`);
                         }
-                        const savedDocument = await response.json();
+                        await response.json();
 
                         set((state) => {
-                            const newState = {
-                                documents: state.documents.map((doc) =>
-                                    doc.id === id ? { ...doc, state: validatedState } : doc
-                                ),
-                                unsavedChanges: state.unsavedChanges.filter((docId) => docId !== id),
-                                lastSavedState: {
-                                    ...state.lastSavedState,
-                                    [id]: {
-                                        nodes: JSON.parse(JSON.stringify(validatedState.nodes)),
-                                        edges: JSON.parse(JSON.stringify(validatedState.edges)),
-                                    },
+                            const updatedUnsaved = state.unsavedChanges.filter((docId) => docId !== id);
+                            const newLastSaved = {
+                                ...state.lastSavedState,
+                                [id]: {
+                                    nodes: JSON.parse(JSON.stringify(validatedState.nodes)),
+                                    edges: JSON.parse(JSON.stringify(validatedState.edges)),
                                 },
                             };
-
-                            return newState;
+                            const currentDoc = state.documents.find((d) => d.id === id);
+                            let finalUnsaved = updatedUnsaved;
+                            if (currentDoc) {
+                                const currentNodesStr = JSON.stringify(currentDoc.state.nodes);
+                                const currentEdgesStr = JSON.stringify(currentDoc.state.edges);
+                                const savedNodesStr = JSON.stringify(newLastSaved[id].nodes);
+                                const savedEdgesStr = JSON.stringify(newLastSaved[id].edges);
+                                const hasPendingChanges = currentNodesStr !== savedNodesStr || currentEdgesStr !== savedEdgesStr;
+                                if (hasPendingChanges) {
+                                    finalUnsaved = [...updatedUnsaved, id];
+                                }
+                            }
+                            return {
+                                unsavedChanges: finalUnsaved,
+                                lastSavedState: newLastSaved,
+                                isAutoSaving: false, // Reset after save
+                            };
                         });
                     } catch (error: any) {
                         console.error('Failed to save document:', error.message, error.stack);
+                        set({ isAutoSaving: false }); // Reset on error
                         throw new Error(`Failed to save document: ${error.message}`);
                     }
                 },
 
                 loadDocuments: async () => {
                     try {
+                        await get().syncUnauthorizedDocument();
                         const token = useAuthStore.getState().token;
                         if (!token) {
                             console.warn('No authentication token found. Resetting to default document.');
@@ -480,7 +620,6 @@ export const useDocumentStore = create<DocumentStore>()(
                         });
                         if (!response.ok) {
                             const errorData = await response.json();
-                            console.error('Backend error response:', errorData);
                             throw new Error(errorData.error || 'Failed to load documents');
                         }
                         const backendDocs = await response.json();
@@ -516,6 +655,7 @@ export const useDocumentStore = create<DocumentStore>()(
                                 activeDocumentId: sanitizedDocs[0].id,
                                 unsavedChanges: [],
                                 lastSavedState: newLastSavedState,
+                                isAutoSaving: false,
                             });
 
                         } else {
@@ -558,6 +698,7 @@ export const useDocumentStore = create<DocumentStore>()(
                         activeDocumentId: newDocId,
                         unsavedChanges: [],
                         lastSavedState: { [newDocId]: { nodes: [], edges: [] } },
+                        isAutoSaving: false,
                     });
 
                 },
@@ -574,7 +715,12 @@ export const useDocumentStore = create<DocumentStore>()(
                                 saveTempDocumentToSession(activeDoc);
                                 saveUnauthorizedDocument(activeDoc);
                             }
+                            return {
+                                documents: updatedDocuments,
+                                isAutoSaving: false, // Add this line
+                            };
                         }
+                        // Trigger auto-save for authenticated users
                         const currentLastSaved = store.lastSavedState[id] || { nodes: [], edges: [] };
                         const newNodes = state.nodes ?? store.documents.find(doc => doc.id === id)?.state.nodes ?? [];
                         const newEdges = state.edges ?? store.documents.find(doc => doc.id === id)?.state.edges ?? [];
@@ -584,13 +730,22 @@ export const useDocumentStore = create<DocumentStore>()(
                         const newUnsavedChanges = hasContentChanged && !store.unsavedChanges.includes(id)
                             ? [...store.unsavedChanges, id]
                             : store.unsavedChanges;
+                        if (hasContentChanged) {
+                            debouncedAutoSave(id); // Delay to batch changes
+                            return {
+                                documents: updatedDocuments,
+                                unsavedChanges: newUnsavedChanges,
+                                isAutoSaving: true, // Add this line
+                            };
+                        }
                         return {
                             documents: updatedDocuments,
                             unsavedChanges: newUnsavedChanges,
+                            isAutoSaving: false, // Add this line
                         };
                     });
-
                 },
+
 
                 syncUnauthorizedDocument: async () => {
                     const unauthorizedDoc = loadUnauthorizedDocument();
@@ -604,6 +759,7 @@ export const useDocumentStore = create<DocumentStore>()(
                         return;
                     }
                     try {
+                        set({ isAutoSaving: true });
                         const validatedState: CanvasState = {
                             nodes: Array.isArray(unauthorizedDoc.state.nodes) ? unauthorizedDoc.state.nodes : [],
                             edges: Array.isArray(unauthorizedDoc.state.edges) ? unauthorizedDoc.state.edges : [],
@@ -673,12 +829,14 @@ export const useDocumentStore = create<DocumentStore>()(
                                         edges: JSON.parse(JSON.stringify(validatedState.edges)),
                                     },
                                 },
+                                isAutoSaving: false,
                             };
                         });
                         localStorage.removeItem(UNAUTHORIZED_STORAGE_KEY);
 
                     } catch (error) {
                         console.error('Failed to sync unauthorized document:', error);
+                        set({ isAutoSaving: false });
                         throw error;
                     }
                 },

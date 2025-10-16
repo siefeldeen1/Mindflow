@@ -1,8 +1,13 @@
-import React from 'react';
+// ResizeHandles.tsx
+import React, { useState } from 'react';
 import { Circle } from 'react-konva';
-import { Node } from '@/types';
+import { Node,Point } from '@/types';
 import { useCanvasStore } from '@/store/useCanvasStore';
-
+import { useThemeStore } from '@/store/useThemeStore';
+interface NodeState {
+  size: { width: number; height: number };
+  position: { x: number; y: number };
+}
 interface ResizeHandlesProps {
   node: Node;
   isSelected: boolean;
@@ -16,6 +21,43 @@ export const ResizeHandles: React.FC<ResizeHandlesProps> = ({
   onResize,
   viewport,
 }) => {
+  const [nodeState, setNodeState] = useState<NodeState>({
+    size: node.size,
+    position: node.position,
+  });
+  const { isDark } = useThemeStore(); // Trigger re-render on theme change
+ const updateEdges = (updatedNode: Node) => {
+              const { edges, nodes, getAnchor } = useCanvasStore.getState();
+              const connectedEdges = edges.filter(
+                (edge) => edge.sourceNodeId === node.id || edge.targetNodeId === node.id
+              );
+              const updatedEdges = connectedEdges.map((edge) => {
+                const sourceNode = edge.sourceNodeId === node.id ? updatedNode : 
+                  nodes.find((n) => n.id === edge.sourceNodeId)!;
+                const targetNode = edge.targetNodeId === node.id ? updatedNode : 
+                  nodes.find((n) => n.id === edge.targetNodeId)!;
+                
+                const sourceAnchor = getAnchor(sourceNode, targetNode);
+                const targetAnchor = getAnchor(targetNode, sourceNode);
+                
+                return { ...edge, sourceAnchor, targetAnchor };
+              });
+              useCanvasStore.setState({ edges: edges.map((e) => updatedEdges.find((ue) => ue.id === e.id) || e) });
+            };
+  // Compute resize handle fill color dynamically
+  const getResizeHandleFill = () => {
+    const style = getComputedStyle(document.documentElement);
+    const hsl = style.getPropertyValue('--resize-handle-fill').trim();
+    return `hsl(${hsl})`;
+  };
+
+  // Compute resize handle stroke color dynamically
+  const getResizeHandleStroke = () => {
+    const style = getComputedStyle(document.documentElement);
+    const hsl = style.getPropertyValue('--resize-handle-stroke').trim();
+    return `hsl(${hsl})`;
+  };
+
   if (!isSelected) return null;
 
   const handleSize = 6 / viewport.scale;
@@ -40,78 +82,92 @@ export const ResizeHandles: React.FC<ResizeHandlesProps> = ({
           x={handle.x}
           y={handle.y}
           radius={handleSize}
-          fill="hsl(var(--background))"
-          stroke="hsl(var(--primary))"
+          fill={getResizeHandleFill()}
+          stroke={getResizeHandleStroke()}
           strokeWidth={strokeWidth}
           draggable
-          onDragMove={(e) => {
-            const stage = e.target.getStage();
-            if (!stage) return;
-
-            const newPos = e.target.absolutePosition();
-            const originalPos = node.position;
-            const originalSize = node.size;
-
-            const relativePos = {
-              x: (newPos.x - viewport.x) / viewport.scale,
-              y: (newPos.y - viewport.y) / viewport.scale,
-            };
-
-            const newSize = { ...originalSize };
-            const newPosition = { ...originalPos };
-
-            switch (index) {
-              case 0: // top-left
-                newSize.width = originalSize.width + (originalPos.x - relativePos.x);
-                newSize.height = originalSize.height + (originalPos.y - relativePos.y);
-                newPosition.x = relativePos.x;
-                newPosition.y = relativePos.y;
-                break;
-              case 1: // top-right
-                newSize.width = relativePos.x - originalPos.x;
-                newSize.height = originalSize.height + (originalPos.y - relativePos.y);
-                newPosition.y = relativePos.y;
-                break;
-              case 2: // bottom-right
-                newSize.width = relativePos.x - originalPos.x;
-                newSize.height = relativePos.y - originalPos.y;
-                break;
-              case 3: // bottom-left
-                newSize.width = originalSize.width + (originalPos.x - relativePos.x);
-                newSize.height = relativePos.y - originalPos.y;
-                newPosition.x = relativePos.x;
-                break;
-              case 4: // top-center
-                newSize.height = originalSize.height + (originalPos.y - relativePos.y);
-                newPosition.y = relativePos.y;
-                break;
-              case 5: // right-center
-                newSize.width = relativePos.x - originalPos.x;
-                break;
-              case 6: // bottom-center
-                newSize.height = relativePos.y - originalPos.y;
-                break;
-              case 7: // left-center
-                newSize.width = originalSize.width + (originalPos.x - relativePos.x);
-                newPosition.x = relativePos.x;
-                break;
+          onDragStart={(e) => {
+            e.cancelBubble = true;
+            if (e.evt) {
+              e.evt.stopPropagation();
+              e.evt.preventDefault();
             }
-
-            newSize.width = Math.max(20, newSize.width);
-            newSize.height = Math.max(20, newSize.height);
-
-            onResize(newSize);
-            if (newPosition.x !== originalPos.x || newPosition.y !== originalPos.y) {
-              useCanvasStore.setState((state) => ({
-                nodes: state.nodes.map((n) =>
-                  n.id === node.id ? { ...n, position: newPosition } : n
-                ),
-              }));
-            }
-
-            e.target.position({ x: handle.x, y: handle.y });
           }}
-          onDragEnd={() => {
+         onDragMove={(e) => {
+  e.cancelBubble = true;
+  if (e.evt) {
+    e.evt.stopPropagation();
+    e.evt.preventDefault();
+  }
+  const stage = e.target.getStage();
+  if (!stage) return;
+
+  const newPos = e.target.absolutePosition();
+  const originalPos = node.position;
+  const originalSize = node.size;
+
+  const relativePos = {
+    x: (newPos.x - viewport.x) / viewport.scale,
+    y: (newPos.y - viewport.y) / viewport.scale,
+  };
+
+  const newSize = { ...originalSize };
+  const newPosition = { ...originalPos };
+
+  switch (index) {
+    case 0: // top-left
+      newSize.width = originalSize.width + (originalPos.x - relativePos.x);
+      newSize.height = originalSize.height + (originalPos.y - relativePos.y);
+      newPosition.x = relativePos.x;
+      newPosition.y = relativePos.y;
+      break;
+    case 1: // top-right
+      newSize.width = relativePos.x - originalPos.x;
+      newSize.height = originalSize.height + (originalPos.y - relativePos.y);
+      newPosition.y = relativePos.y;
+      break;
+    case 2: // bottom-right
+      newSize.width = relativePos.x - originalPos.x;
+      newSize.height = relativePos.y - originalPos.y;
+      break;
+    case 3: // bottom-left
+      newSize.width = originalSize.width + (originalPos.x - relativePos.x);
+      newSize.height = relativePos.y - originalPos.y;
+      newPosition.x = relativePos.x;
+      break;
+    case 4: // top-center
+      newSize.height = originalSize.height + (originalPos.y - relativePos.y);
+      newPosition.y = relativePos.y;
+      break;
+    case 5: // right-center
+      newSize.width = relativePos.x - originalPos.x;
+      break;
+    case 6: // bottom-center
+      newSize.height = relativePos.y - originalPos.y;
+      break;
+    case 7: // left-center
+      newSize.width = originalSize.width + (originalPos.x - relativePos.x);
+      newPosition.x = relativePos.x;
+      break;
+  }
+
+  newSize.width = Math.max(20, newSize.width);
+  newSize.height = Math.max(20, newSize.height);
+  const updatedNode = { ...node, size: newSize, position: newPosition };
+  setNodeState({ size: newSize, position: newPosition });
+  useCanvasStore.getState().updateNodeSync(node.id, updatedNode);
+  updateEdges(updatedNode);
+
+  e.target.position({ x: handle.x, y: handle.y });
+}}
+          onDragEnd={(e) => {
+            
+            e.cancelBubble = true;
+            if (e.evt) {
+              e.evt.stopPropagation();
+              e.evt.preventDefault();
+            }
+            useCanvasStore.getState().updateNodeSync(node.id, nodeState);
             useCanvasStore.getState().saveHistory();
           }}
           onMouseEnter={(e) => {

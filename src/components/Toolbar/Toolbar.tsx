@@ -10,29 +10,33 @@ import {
   Redo,
   Download,
   Upload,
-  Sun,
-  Moon,
   Save,
-  FolderOpen
+  FolderOpen,
+  X,
+  Loader2,
+  Share2,
+  Hand,
+  Copy,
+  Trash
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useCanvasStore } from '@/store/useCanvasStore';
-import { useThemeStore } from '@/store/useThemeStore';
 import { useDocumentStore } from '@/store/useDocumentStore';
 import { useAuthStore } from '@/store/useAuthStore';
-import { AuthDialog } from '@/components/Auth/AuthDialog';
 import { CanvasState } from '@/types';
 
 interface ToolbarProps {
   activeDocumentId: string;
+  setShowDeleteConfirm: (id: string | null) => void;
+  setShowClearConfirm: (show: boolean) => void;
+  readOnly?: boolean;
 }
 
-export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
+export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId, setShowDeleteConfirm, setShowClearConfirm,readOnly = false }) => {
   const { tool, setTool, undo, redo, clear, history, historyIndex, isConnecting, addNode, addTextNode, nodes, edges, viewport } = useCanvasStore();
-  const { toggleTheme } = useThemeStore();
-  const { saveDocument, markUnsaved, lastSavedState } = useDocumentStore();
-  const { isAuthenticated } = useAuthStore();
+  const { saveDocument, markUnsaved, lastSavedState,isAutoSaving } = useDocumentStore();
+  const { isAuthenticated,token } = useAuthStore();
   const [showNotification, setShowNotification] = useState<string | null>(null);
   const lastSavedStateRef = useRef<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] });
   const isSavingRef = useRef<boolean>(false);
@@ -55,7 +59,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
       
     }
   }, [activeDocumentId, lastSavedState]);
-
+useEffect(() => {
+  if (readOnly) {
+    setTool('hand');
+  }
+}, [readOnly, setTool]);
   // Handle notification timeout
   useEffect(() => {
     if (showNotification) {
@@ -107,6 +115,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
   }, [nodes, edges, activeDocumentId, markUnsaved]);
 
   const handleShapeClick = (shapeType: 'rectangle' | 'ellipse' | 'diamond') => {
+    if (readOnly) {
+    setShowNotification('Cannot add shapes in read-only mode');
+    return;
+  }
     const nodeCount = nodes.length;
     const row = Math.floor(nodeCount / maxPerRow);
     const col = nodeCount % maxPerRow;
@@ -119,6 +131,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
   };
 
   const handleTextClick = () => {
+    if (readOnly) {
+    setShowNotification('Cannot add text in read-only mode');
+    return;
+  }
     const nodeCount = nodes.length;
     const row = Math.floor(nodeCount / maxPerRow);
     const col = nodeCount % maxPerRow;
@@ -131,11 +147,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
   };
 
   const handleLineClick = () => {
+    if (readOnly) {
+    setShowNotification('Cannot connect shapes in read-only mode');
+    return;
+  }
     setTool('line');
     setShowNotification('Select the shapes to connect them');
   };
 
   const handleSave = async () => {
+    if (readOnly) {
+    setShowNotification('Cannot save in read-only mode');
+    return;
+  }
     if (!isAuthenticated) {
       setShowNotification('Please log in to save your document');
       return;
@@ -198,8 +222,46 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
       setShowNotification('Failed to export document');
     }
   };
-
+const handleShare = async () => {
+  if (readOnly) {
+    setShowNotification('Cannot share in read-only mode');
+    return;
+  }
+    if (!isAuthenticated) {
+      setShowNotification('Please log in to share');
+      return;
+    }
+    if (!activeDocumentId) {
+      setShowNotification('No document selected');
+      return;
+    }
+    try {
+      const state = { nodes, edges, viewport };
+      const jsonString = JSON.stringify(state);
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/share`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ docId: activeDocumentId, json: jsonString }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to generate share link');
+      }
+      const { shareLink } = await response.json();
+      navigator.clipboard.writeText(shareLink);
+      setShowNotification('Share link copied to clipboard');
+    } catch (error) {
+      console.error('Share error:', error);
+      setShowNotification('Failed to share document');
+    }
+  };
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (readOnly) {
+    setShowNotification('Cannot import in read-only mode');
+    return;
+  }
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -248,11 +310,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
   };
 
   const triggerFileInput = () => {
+    if (readOnly) {
+    setShowNotification('Cannot import in read-only mode');
+    return;
+  }
     fileInputRef.current?.click();
   };
 
   const tools = [
     { id: 'select', icon: MousePointer, label: 'Select' },
+    { id: 'hand', icon: Hand, label: 'Pan' },
     { id: 'text', icon: Type, label: 'Add Text' },
     { id: 'line', icon: Minus, label: isConnecting ? 'Click 2 shapes to connect' : 'Connect Shapes' },
   ] as const;
@@ -289,6 +356,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
             variant={tool === toolItem.id ? 'default' : 'ghost'}
             size="sm"
             onClick={() => {
+              if (readOnly) {
+      setShowNotification('Cannot change tools in read-only mode');
+      return;
+    }
               if (toolItem.id === 'text') {
                 handleTextClick();
               } else if (toolItem.id === 'line') {
@@ -319,6 +390,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
             }}
             className="w-9 h-9 p-0"
             title={shape.label}
+            disabled={readOnly}
           >
             <shape.icon className="w-4 h-4" />
           </Button>
@@ -332,6 +404,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
           variant="ghost"
           size="sm"
           onClick={() => {
+            if (readOnly) {
+      setShowNotification('Cannot undo in read-only mode');
+      return;
+    }
             undo();
             setShowNotification(null);
           }}
@@ -345,6 +421,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
           variant="ghost"
           size="sm"
           onClick={() => {
+            if (readOnly) {
+      setShowNotification('Cannot undo in read-only mode');
+      return;
+    }
             redo();
             setShowNotification(null);
           }}
@@ -354,26 +434,76 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
         >
           <Redo className="w-4 h-4" />
         </Button>
+        <Button
+    variant="ghost"
+    size="sm"
+    onClick={() => {
+      if (readOnly) {
+        setShowNotification('Cannot duplicate in read-only mode');
+        return;
+      }
+      const { selectedNodes, duplicateNode } = useCanvasStore.getState();
+      if (selectedNodes.length === 1) {
+        duplicateNode(selectedNodes[0]);
+        setShowNotification('Node duplicated');
+      } else {
+        setShowNotification('Select exactly one node to duplicate');
+      }
+    }}
+    disabled={useCanvasStore.getState().selectedNodes.length !== 1 || readOnly}
+    className="w-9 h-9 p-0"
+    title="Duplicate Selected Node"
+  >
+    <Copy className="w-4 h-4" />
+  </Button>
+  <Button
+    variant="ghost"
+    size="sm"
+    onClick={() => {
+      if (readOnly) {
+        setShowNotification('Cannot delete in read-only mode');
+        return;
+      }
+      const { selectedNodes, deleteNode } = useCanvasStore.getState();
+      if (selectedNodes.length === 1) {
+        deleteNode(selectedNodes[0]);
+        setShowNotification('Node deleted');
+      } else {
+        setShowNotification('Select exactly one node to delete');
+      }
+    }}
+    disabled={useCanvasStore.getState().selectedNodes.length !== 1 || readOnly}
+    className="w-9 h-9 p-0"
+    title="Delete Selected Node"
+  >
+    <Trash className="w-4 h-4" />
+  </Button>
       </div>
 
       <Separator orientation="vertical" className="h-6" />
 
       <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleSave}
-          className="w-9 h-9 p-0"
-          title="Save"
-        >
-          <Save className="w-4 h-4" />
-        </Button>
+       <Button
+  variant="ghost"
+  size="sm"
+  onClick={handleSave}
+  className="w-9 h-9 p-0 relative"
+  title="Save"
+  disabled={readOnly}
+>
+  {isAutoSaving ? (
+    <Loader2 className="w-4 h-4 animate-spin" />
+  ) : (
+    <Save className="w-4 h-4" />
+  )}
+</Button>
         <Button
           variant="ghost"
           size="sm"
           onClick={handleExport}
           className="w-9 h-9 p-0"
-          title="Export as JSON"
+          title="Export file"
+          disabled={readOnly}
         >
           <Download className="w-4 h-4" />
         </Button>
@@ -382,39 +512,57 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeDocumentId }) => {
           size="sm"
           onClick={triggerFileInput}
           className="w-9 h-9 p-0"
-          title="Import from JSON"
+          title="Import file"
+          disabled={readOnly}
         >
           <Upload className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleShare}
+          className="w-9 h-9 p-0"
+          title="Share Document"
+          disabled={readOnly}
+        >
+          <Share2 className="w-4 h-4" />
         </Button>
       </div>
 
       <div className="flex-1" />
 
       <div className="flex items-center gap-2">
-        {/* <AuthDialog /> */}
         <Button
           variant="destructive"
           size="sm"
+          className="flex items-center gap-2 hover:bg-destructive/90 transition-colors duration-200 rounded-full"
           onClick={() => {
-            clear();
-            setShowNotification(null);
-          }}
-          title="Clear Canvas"
+    if (readOnly) {
+      setShowNotification('Cannot delete tabs in read-only mode');
+      return;
+    }
+    setShowDeleteConfirm(activeDocumentId);
+  }}
+          disabled={useDocumentStore.getState().documents.length <= 1 || readOnly}
+          title="Delete Current Tab"
         >
-          Clear
+          <span className="hidden sm:inline">Delete Tab</span>
+          <X className="w-4 h-4" />
         </Button>
         <Separator orientation="vertical" className="h-6" />
         <Button
-          variant="ghost"
+          variant="destructive"
           size="sm"
+          className="flex items-center gap-2 hover:bg-destructive/90 transition-colors duration-200 rounded-full"
           onClick={() => {
-            toggleTheme();
+            setShowClearConfirm(true);
             setShowNotification(null);
           }}
-          className="w-9 h-9 p-0"
-          title="Toggle Theme"
+          title="Clear Canvas"
+          disabled={readOnly}
         >
-          {useThemeStore.getState().isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          <span className="hidden sm:inline">Clear</span>
+          <X className="w-4 h-4" />
         </Button>
       </div>
     </div>

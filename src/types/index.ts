@@ -45,7 +45,7 @@ export interface CanvasState {
   selectedNodes: string[];
   selectedEdges: string[];
   viewport: ViewportState;
-  tool: 'select' | 'line';
+  tool: 'select' | 'hand' | 'line' | 'text';
   isConnecting: boolean;
   connectionSource: string | null;
   history: HistoryState[];
@@ -65,4 +65,6 @@ export interface Document {
   id: string;
   name: string;
   state: CanvasState;
+  isShared?: boolean;
+  // isPersisted: boolean;
 }

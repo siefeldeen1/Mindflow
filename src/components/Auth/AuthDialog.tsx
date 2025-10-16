@@ -14,45 +14,16 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useDocumentStore } from '@/store/useDocumentStore';
 import { LogIn } from 'lucide-react';
-import { GoogleAuthProvider, signInWithRedirect, getAuth, getRedirectResult, onAuthStateChanged, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
-
+import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase';
+import { useSearchParams } from 'react-router-dom';
 // Backend API base URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
-// Firebase configuration
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'missing-api-key',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'missing-auth-domain',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'missing-project-id',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'missing-storage-bucket',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || 'missing-sender-id',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || 'missing-app-id',
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'missing-measurement-id',
-};
 
-// Validate Firebase configuration
-const isFirebaseConfigValid = Object.values(firebaseConfig).every(
-  value => value && !value.includes('missing')
-);
 
-// Initialize Firebase
-let auth;
-try {
-  if (isFirebaseConfigValid) {
-    const app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    setPersistence(auth, browserLocalPersistence).catch((error) => {
-      console.error('Failed to set Firebase persistence:', error);
-    });
-  } else {
-    console.error('Firebase configuration is incomplete. Google Sign-In will be disabled.');
-  }
-} catch (error) {
-  console.error('Failed to initialize Firebase:', error);
-}
 
-const provider = auth ? new GoogleAuthProvider() : null;
+
 
 export const AuthDialog: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -60,7 +31,8 @@ export const AuthDialog: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const { activeDocumentId } = useDocumentStore();
-  const { login, register, isAuthenticated, user, setUser, setToken } = useAuthStore();
+  const { login, register, isAuthenticated, user, setUser, setToken,loginWithSupabase } = useAuthStore();
+const [searchParams, setSearchParams] = useSearchParams();
 
   const [loginForm, setLoginForm] = useState({
     email: '',
@@ -74,47 +46,36 @@ export const AuthDialog: React.FC = () => {
     confirmPassword: '',
   });
 
-  // Handle Google Sign-In redirect result
-  useEffect(() => {
-    if (!auth || !provider) return;
+useEffect(() => {
+  const handleSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
 
-    const handleRedirectResult = async () => {
-      try {
-        setIsLoading(true);
-        setError('');
-        const result = await getRedirectResult(auth);
-        
+    if (session?.user) {
+      const response = await fetch(`${API_BASE_URL}/api/auth/supabase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: session.access_token }),
+      });
 
-        if (result && result.user) {
-          const idToken = await result.user.getIdToken();
-          const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ token: idToken }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Google authentication failed');
-          }
-
-          const data = await response.json();
-          setUser(data.user);
-          setToken(data.token);
-          setOpen(false);
-        }
-      } catch (err: any) {
-        console.error('Redirect error:', err);
-        setError(`Google authentication failed: ${err.message}`);
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        const errData = await response.json();
+        setError(errData.error || 'Supabase auth failed');
+        return;
       }
-    };
 
-    handleRedirectResult();
-  }, [auth, setUser, setToken]);
+      const data = await response.json();
+
+      // ✅ Update your store
+      setUser(data.user);
+      setToken(data.token);
+
+      setOpen(false);
+    }
+  };
+
+  handleSession();
+}, []);
+
 
 useEffect(() => {
   const validateToken = async () => {
@@ -141,42 +102,7 @@ useEffect(() => {
 
   validateToken();
 }, []);
-
-  // Monitor Firebase auth state changes
-  useEffect(() => {
-    if (!auth) return;
-
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser && !isAuthenticated) {
-        try {
-          if (useAuthStore.getState().token) return;
-
-          const idToken = await firebaseUser.getIdToken();
-          const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: idToken }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Google authentication failed');
-          }
-
-          const data = await response.json();
-          setUser(data.user);
-          setToken(data.token);
-          setOpen(false);
-        } catch (err: any) {
-          console.error('Auth state change error:', err);
-          setError(`Google authentication failed: ${err.message}`);
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, [auth, isAuthenticated, setUser, setToken]);
-
+ 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -185,6 +111,9 @@ useEffect(() => {
     try {
       await login(loginForm.email, loginForm.password, activeDocumentId);
       setOpen(false);
+      if (searchParams.has('share')) {
+      setSearchParams({});
+    }
     } catch (err: any) {
       setError('Invalid email or password');
     } finally {
@@ -206,6 +135,9 @@ useEffect(() => {
     try {
       await register(registerForm.email, registerForm.password, registerForm.name, activeDocumentId);
       setOpen(false);
+      if (searchParams.has('share')) {
+      setSearchParams({});
+    }
     } catch (err: any) {
       setError('Registration failed. Please try again.');
     } finally {
@@ -213,49 +145,49 @@ useEffect(() => {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    if (!auth || !provider) {
-      setError('Google Sign-In is not available due to configuration issues');
-      return;
-    }
+ const handleGoogleSignIn = async () => {
+  // setIsLoading(true);
+  // setError('');
+  try {
+    await loginWithSupabase(activeDocumentId);
+  } catch (err: any) {
+    console.error('Google sign-in error:', err.message);
+    // setError(`Google authentication failed: ${err.message}`);
+    //   setIsLoading(false);
+  }
+};
 
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      await signInWithRedirect(auth, provider);
-      
-    } catch (err: any) {
-      console.error('Google Sign-In error:', err);
-      setError(`Google authentication failed: ${err.message}`);
-      setIsLoading(false);
-    }
-  };
+ 
 
-  const handleLogout = async () => {
-    try {
-      
-      const { unsavedChanges, documents, saveDocument } = useDocumentStore.getState();
-      for (const docId of unsavedChanges) {
-        const doc = documents.find((d) => d.id === docId);
-        if (doc) {
-          
-          await saveDocument(doc.id, doc.state);
-        }
-      }
-      if (auth) {
-        
-        await signOut(auth);
-      }
-      useAuthStore.getState().logout();
-      useDocumentStore.getState().reset();
-      
-      setLogoutConfirmOpen(false);
-    } catch (error: any) {
-      console.error('handleLogout: Logout failed:', error);
-      setError('Failed to log out. Please try again.');
-    }
-  };
+const handleLogout = async () => {
+  try {
+    // Fire and forget (don’t await it — avoids channel hang)
+    supabase.auth.signOut().catch(() => {});
+
+    // Wait a bit to let Supabase internal cleanup finish
+    await new Promise((r) => setTimeout(r, 300));
+
+    // Manually remove Supabase session token (important)
+    localStorage.removeItem(
+      `sb-${import.meta.env.VITE_SUPABASE_URL.split('https://')[1].split('.')[0]}-auth-token`
+    );
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('temp-document');
+
+    // Reset Zustand stores
+    useAuthStore.getState().logout();
+    useDocumentStore.getState().reset();
+
+    // Close logout modal
+    setLogoutConfirmOpen(false);
+  } catch (err) {
+    console.error('Logout error:', err);
+    setError('Failed to log out. Please try again.');
+  }
+};
+
+
 
   return (
     <>
@@ -329,7 +261,7 @@ useEffect(() => {
                     required
                   />
                 </div>
-                {/* {auth && (
+                {/* {auth && ( */}
                   <Button
                     type="button"
                     variant="outline"
@@ -339,7 +271,7 @@ useEffect(() => {
                   >
                     Sign in with Google
                   </Button>
-                )} */}
+                {/* )} */}
                 {error && (
                   <p className="text-sm text-destructive">{error}</p>
                 )}
@@ -402,7 +334,7 @@ useEffect(() => {
                     required
                   />
                 </div>
-                {/* {auth && (
+                {/* {auth && ( */}
                   <Button
                     type="button"
                     variant="outline"
@@ -412,7 +344,7 @@ useEffect(() => {
                   >
                     Sign in with Google
                   </Button>
-                )} */}
+                {/* )} */}
                 {error && (
                   <p className="text-sm text-destructive">{error}</p>
                 )}

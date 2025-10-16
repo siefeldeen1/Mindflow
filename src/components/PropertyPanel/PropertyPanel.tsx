@@ -8,7 +8,7 @@ import { useCanvasStore } from '@/store/useCanvasStore';
 
 export const PropertyPanel: React.FC = () => {
   // Modified: Added updateNodeSync to destructure
-  const { nodes, selectedNodes, updateNode, updateNodeSync, saveHistory } = useCanvasStore();
+  const { nodes, selectedNodes, updateNode, updateNodeSync, saveHistory,selectionVisible, setSelectionVisible } = useCanvasStore();
 
   const selectedNode = selectedNodes.length === 1
     ? nodes.find(node => node.id === selectedNodes[0])
@@ -64,23 +64,35 @@ export const PropertyPanel: React.FC = () => {
   // Modified: Use updateNodeSync for immediate updates
   const handleSizeChange = (field: 'width' | 'height', value: string) => {
     const numValue = parseFloat(value) || 0;
-    updateNodeSync(selectedNode.id, {
-      size: {
-        ...selectedNode.size,
-        [field]: Math.max(20, numValue), // Minimum size
-      },
-    });
+    const maxSize = 5000;
+   updateNodeSync(selectedNode.id, {
+    size: {
+      ...selectedNode.size,
+      [field]: Math.max(20, Math.min(maxSize, numValue)), 
+    },
+  });
     saveHistory(); // Trigger edge updates
   };
 
   const handleColorChange = (field: 'fill' | 'stroke', value: string) => {
-    updateNode(selectedNode.id, { [field]: value });
-    saveHistory(); // Trigger edge updates
-  };
+  updateNode(selectedNode.id, { [field]: value });
+
+  if (field === 'stroke') {
+    const { setSelectionVisible } = useCanvasStore.getState();
+    setSelectionVisible(false);
+    clearTimeout((window as any)._selectionTimeout);
+    (window as any)._selectionTimeout = setTimeout(() => {
+      setSelectionVisible(true);
+    }, 1000);
+  }
+
+  saveHistory();
+};
 
   const handleStrokeWidthChange = (value: string) => {
     const numValue = parseFloat(value) || 0;
-    updateNode(selectedNode.id, { strokeWidth: Math.max(0, numValue) });
+      const maxStrokeWidth = 10;
+     updateNode(selectedNode.id, { strokeWidth: Math.max(0, Math.min(maxStrokeWidth, numValue)) });
     saveHistory(); // Trigger edge updates
   };
 
@@ -213,34 +225,16 @@ export const PropertyPanel: React.FC = () => {
           <Label>Actions</Label>
           <div className="space-y-2">
             <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                const newNode = {
-                  ...selectedNode,
-                  id: crypto.randomUUID(),
-                  position: {
-                    x: selectedNode.position.x + 20,
-                    y: selectedNode.position.y + 20,
-                  },
-                };
-                useCanvasStore.getState().addNode(newNode.type, newNode.position);
-                useCanvasStore.getState().updateNode(
-                  useCanvasStore.getState().nodes[useCanvasStore.getState().nodes.length - 1].id,
-                  {
-                    text: newNode.text,
-                    fill: newNode.fill,
-                    stroke: newNode.stroke,
-                    strokeWidth: newNode.strokeWidth,
-                    size: newNode.size,
-                  }
-                );
-                saveHistory(); // Trigger edge updates
-              }}
-            >
-              Duplicate
-            </Button>
+  variant="outline"
+  size="sm"
+  className="w-full"
+  onClick={() => {
+    useCanvasStore.getState().duplicateNode(selectedNode.id);
+    saveHistory(); // Trigger edge updates (if needed, but duplicateNode already calls it)
+  }}
+>
+  Duplicate
+</Button>
             <Button
               variant="destructive"
               size="sm"

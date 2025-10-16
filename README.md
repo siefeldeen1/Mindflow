@@ -54,12 +54,6 @@ This project is designed for brainstorming, project planning, note-taking, and m
   - Lucide Icons for UI elements
   - Lodash for utilities (e.g., debounce)
 
-- **Backend** (Assumed Node.js/Express setup at `http://localhost:5000`):
-  - API endpoints for auth (`/api/auth/login`, `/api/auth/register`) and documents (`/api/documents`).
-  - MongoDB or similar for storing user accounts and documents.
-  - JWT for authentication.
-  - Google OAuth2 for social login.
-
 - **Other**:
   - UUID for unique IDs.
   - TypeScript for type safety.

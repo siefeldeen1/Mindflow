@@ -1,4 +1,3 @@
-// useCanvasStore.ts
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { debounce } from 'lodash';
@@ -6,10 +5,11 @@ import { Node, Edge, CanvasState, ViewportState, Point, NodeType, HistoryState }
 import { useDocumentStore } from '@/store/useDocumentStore';
 
 interface CanvasStore extends CanvasState {
+  showPropertyPanel: boolean;
   addNode: (type: NodeType, position: Point) => void;
   addTextNode: (position: Point) => void;
   updateNode: (id: string, updates: Partial<Node>) => void;
-  updateNodeSync: (id: string, updates: Partial<Node>) => void; // Added: Synchronous node update for PropertyPanel
+  updateNodeSync: (id: string, updates: Partial<Node>) => void;
   deleteNode: (id: string) => void;
   selectNode: (id: string, multiSelect?: boolean) => void;
   selectNodes: (ids: string[]) => void;
@@ -41,6 +41,16 @@ interface CanvasStore extends CanvasState {
   updateConnectedEdges: (nodeId: string) => void;
   getAnchor: (fromNode: Node, toNode: Node) => Point;
   flushUpdateNode: () => void;
+  setShowPropertyPanel: (show: boolean) => void;
+  duplicateNode: (nodeId: string) => void;
+  isDragConnecting: boolean;
+  tempTarget: Point | null;
+  startDragConnection: (nodeId: string, initialPos: Point) => void;
+  endDragConnection: (targetNodeId: string | null) => void;
+  updateTempTarget: (pos: Point) => void;
+  getTempAnchor: (nodeId: string, toPoint: Point) => Point;
+  selectionVisible: boolean;
+  setSelectionVisible: (visible: boolean) => void;
 }
 
 const DEFAULT_NODE_SIZE = { width: 120, height: 80 };
@@ -69,8 +79,11 @@ const shallowEqual = (objA: any, objB: any): boolean => {
 };
 
 export const useCanvasStore = create<CanvasStore>((set, get) => {
+
   // Store the last document state to avoid redundant updates
   let lastDocumentState: Partial<CanvasState> | null = null;
+  isDragConnecting: false;
+  tempTarget: null;
 
   // Helper function to update document state
   const updateDocument = () => {
@@ -94,7 +107,21 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
     }
   };
   const debouncedUpdateDocument = debounce(updateDocument, 300);
-  // Added: Centralized anchor calculation function for reuse across addEdge, updateConnectedEdges, and CanvasNode
+
+  const debouncedUpdateNode = debounce((id: string, updates: Partial<Node>) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.id === id ? { ...node, ...updates } : node
+      ),
+    }));
+    get().updateConnectedEdges(id);
+    useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
+    debouncedUpdateDocument();
+  }, 100);
+
+
+
+
   const getAnchor = (fromNode: Node, toNode: Node): Point => {
     const fromCenter = {
       x: fromNode.position.x + fromNode.size.width / 2,
@@ -146,7 +173,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
     }
   };
 
-  // Added: Updates anchors for all edges connected to a specific node
   const updateConnectedEdges = (nodeId: string) => {
     set((state) => {
       const node = state.nodes.find((n) => n.id === nodeId);
@@ -168,17 +194,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
     });
   };
 
-  // Modified: Debounced node update (keeps updateConnectedEdges for drag scenarios)
-  const debouncedUpdateNode = debounce((id: string, updates: Partial<Node>) => {
-    set((state) => ({
-      nodes: state.nodes.map((node) =>
-        node.id === id ? { ...node, ...updates } : node
-      ),
-    }));
-    get().updateConnectedEdges(id); // Added in previous suggestion, kept for drag updates
-    useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
-    debouncedUpdateDocument();
-  }, 100);
+
 
   return {
     nodes: [],
@@ -194,7 +210,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
     isDragging: false,
     isPanning: false,
     selectionBox: null,
-
+    showPropertyPanel: false,
+    selectionVisible: true,
     addNode: (type: NodeType, position: Point) => {
       const node: Node = {
         id: uuidv4(),
@@ -207,6 +224,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
         strokeWidth: 2,
       };
 
+
       set((state) => ({
         nodes: [...state.nodes, node],
         selectedNodes: [node.id],
@@ -214,10 +232,95 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
       }));
       debouncedUpdateDocument();
       useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
-      // get().saveHistory();
-      // updateDocument();
     },
 
+    getTempAnchor: (nodeId: string, toPoint: Point) => {
+      const state = get();
+      const node = state.nodes.find((n) => n.id === nodeId);
+      if (!node) return { x: 0, y: 0 };
+      const fromCenter = {
+        x: node.position.x + node.size.width / 2,
+        y: node.position.y + node.size.height / 2,
+      };
+      const dx = toPoint.x - fromCenter.x;
+      const dy = toPoint.y - fromCenter.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist === 0) return fromCenter;
+      const nx = dx / dist;
+      const ny = dy / dist;
+      switch (node.type) {
+        case 'rectangle':
+        case 'text':
+          const halfWidth = node.size.width / 2;
+          const halfHeight = node.size.height / 2;
+          const tRect = 1 / (Math.abs(nx / halfWidth) + Math.abs(ny / halfHeight));
+          return {
+            x: fromCenter.x + tRect * nx,
+            y: fromCenter.y + tRect * ny,
+          };
+        case 'ellipse':
+          const a = node.size.width / 2;
+          const b = node.size.height / 2;
+          const theta = Math.atan2(dy, dx);
+          return {
+            x: fromCenter.x + a * Math.cos(theta),
+            y: fromCenter.y + b * Math.sin(theta),
+          };
+        case 'diamond':
+          const w = node.size.width / 2;
+          const h = node.size.height / 2;
+          const tDiamond = 1 / (Math.abs(nx / w) + Math.abs(ny / h));
+          return {
+            x: fromCenter.x + tDiamond * nx,
+            y: fromCenter.y + tDiamond * ny,
+          };
+        default:
+          return fromCenter;
+      }
+    },
+    startDragConnection: (nodeId: string, initialPos: Point) => {
+      set({
+        isConnecting: true,
+        connectionSource: nodeId,
+        isDragConnecting: true,
+        tempTarget: initialPos,
+      });
+    },
+    updateTempTarget: (pos: Point) => {
+      set({ tempTarget: pos });
+    },
+    endDragConnection: (targetNodeId: string | null) => {
+      get().endConnection(targetNodeId);
+      set({
+        isDragConnecting: false,
+        tempTarget: null,
+      });
+    },
+
+    duplicateNode: (nodeId: string) => {
+      const state = get();
+      const node = state.nodes.find(n => n.id === nodeId);
+      if (!node) return;
+
+      const newNode: Node = {
+        ...node,
+        id: uuidv4(),
+        position: {
+          x: node.position.x + 20,
+          y: node.position.y + 20,
+        },
+      };
+
+      set({
+        nodes: [...state.nodes, newNode],
+        selectedNodes: [newNode.id],
+        selectedEdges: [],
+      });
+
+      useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
+      get().saveHistory();
+      debouncedUpdateDocument();
+    },
     addTextNode: (position: Point) => {
       const node: Node = {
         id: uuidv4(),
@@ -238,7 +341,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
 
       useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
       get().saveHistory();
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     updateNode: debouncedUpdateNode,
@@ -252,7 +355,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
       }));
       get().updateConnectedEdges(id);
       useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     deleteNode: (id: string) => {
@@ -266,7 +369,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
 
       useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
       get().saveHistory();
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     selectNode: (id: string, multiSelect = false) => {
@@ -287,7 +390,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
           selectedEdges: [],
         };
       });
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     selectNodes: (ids: string[]) => {
@@ -295,7 +398,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
         selectedNodes: ids,
         selectedEdges: [],
       });
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     selectEdge: (id: string, multiSelect = false) => {
@@ -316,7 +419,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
           selectedNodes: [],
         };
       });
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     clearSelection: () => {
@@ -324,7 +427,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
         selectedNodes: [],
         selectedEdges: [],
       });
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     deleteSelected: () => {
@@ -344,10 +447,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
 
       useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
       get().saveHistory();
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
-    // Modified: Updated to use getAnchor for consistency
     addEdge: (sourceNodeId: string, targetNodeId: string) => {
       const { nodes } = get();
       const sourceNode = nodes.find((n) => n.id === sourceNodeId);
@@ -374,7 +476,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
 
       useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
       get().saveHistory();
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     deleteEdge: (id: string) => {
@@ -385,7 +487,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
 
       useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
       get().saveHistory();
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     updateEdgeAnchors: (edgeId: string, sourceAnchor: Point, targetAnchor: Point) => {
@@ -395,7 +497,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
         ),
       }));
       useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     handleEdgeClick: (edgeId: string, multiSelect = false) => {
@@ -415,17 +517,21 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
 
     zoom: (delta: number, center: Point) => {
       const { viewport } = get();
-      const newScale = Math.max(0.1, Math.min(3, viewport.scale + delta));
+      const oldScale = viewport.scale;
+      const newScale = oldScale * (1 + delta);
+      const clamped = Math.max(0.25, Math.min(2, newScale));
 
-      const scaleDiff = newScale - viewport.scale;
-      const newX = viewport.x - (center.x * scaleDiff);
-      const newY = viewport.y - (center.y * scaleDiff);
+      const oldWorldX = (center.x - viewport.x) / oldScale;
+      const oldWorldY = (center.y - viewport.y) / oldScale;
+
+      const newX = center.x - oldWorldX * clamped;
+      const newY = center.y - oldWorldY * clamped;
 
       set({
         viewport: {
           x: newX,
           y: newY,
-          scale: newScale,
+          scale: clamped,
         },
       });
     },
@@ -527,7 +633,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
           selectedEdges: [],
           selectionBox: null,
         });
-        debouncedUpdateDocument();;
+        debouncedUpdateDocument();
       }
     },
 
@@ -538,7 +644,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
     setPanning: (isPanning: boolean) => {
       set({ isPanning });
     },
-
+    setSelectionVisible: (visible: boolean) => set({ selectionVisible: visible }),
     saveHistory: () => {
       const { nodes, edges, viewport, history, historyIndex } = get();
       const newHistoryState: HistoryState = {
@@ -574,7 +680,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
           selectedEdges: [],
         });
         useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
-        debouncedUpdateDocument();;
+        debouncedUpdateDocument();
       }
     },
 
@@ -592,7 +698,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
           selectedEdges: [],
         });
         useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
-        debouncedUpdateDocument();;
+        debouncedUpdateDocument();
       }
     },
 
@@ -603,10 +709,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
         selectedNodes: [],
         selectedEdges: [],
         viewport: DEFAULT_VIEWPORT,
+        showPropertyPanel: false,
       });
       useDocumentStore.getState().markUnsaved(useDocumentStore.getState().activeDocumentId!);
       get().saveHistory();
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     loadCanvas: (canvasState: CanvasState) => {
@@ -615,7 +722,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
       const newEdges = canvasState.edges ? JSON.parse(JSON.stringify(canvasState.edges)) : [];
       const newViewport = canvasState.viewport || DEFAULT_VIEWPORT;
 
-      // Skip update if nodes and edges are unchanged
       if (
         JSON.stringify(currentState.nodes) === JSON.stringify(newNodes) &&
         JSON.stringify(currentState.edges) === JSON.stringify(newEdges)
@@ -629,9 +735,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
         selectedNodes: [],
         selectedEdges: [],
         viewport: newViewport,
+        showPropertyPanel: false,
       });
       get().saveHistory();
-      debouncedUpdateDocument();;
+      debouncedUpdateDocument();
     },
 
     handleKeyDown: (event: KeyboardEvent) => {
@@ -640,8 +747,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
       }
     },
 
-    // Added to return object
     updateConnectedEdges,
     getAnchor,
+
+    setShowPropertyPanel: (show: boolean) => set({ showPropertyPanel: show }),
+    isDragConnecting: false,
+    tempTarget: null,
   };
 });
