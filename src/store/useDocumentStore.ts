@@ -695,16 +695,21 @@ export const useDocumentStore = create<DocumentStore>()(
                             },
                         }), {});
                         if (sanitizedDocs.length > 0) {
+                            const currentActiveId = get().activeDocumentId;
+                            const isValidActiveId = sanitizedDocs.some(doc => doc.id === currentActiveId);
+                            if (!isValidActiveId && currentActiveId) {
+                                console.warn(`Invalid activeDocumentId: ${currentActiveId}, resetting storage`);
+                                sessionStorage.removeItem(SESSION_STORAGE_KEY);
+                                localStorage.removeItem(UNAUTHORIZED_STORAGE_KEY);
+                            }
                             set({
                                 documents: sanitizedDocs,
-                                activeDocumentId: sanitizedDocs[0].id,
+                                activeDocumentId: isValidActiveId ? currentActiveId : sanitizedDocs[0].id,
                                 unsavedChanges: [],
                                 lastSavedState: newLastSavedState,
                                 isAutoSaving: false,
                             });
-
                         } else {
-
                             get().reset();
                         }
                     } catch (error) {
