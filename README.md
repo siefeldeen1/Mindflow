@@ -97,7 +97,7 @@ This project is designed for brainstorming, project planning, note-taking, and m
    ```
    yarn dev
    ```
-   The app will run at `http://localhost:5173` (or similar).
+   The app will run at `http://localhost:8080` (or similar).
 
 5. For the backend:
    - Set up a Node.js server with routes for auth and documents.

@@ -293,15 +293,7 @@ const debouncedAddDocument = useCallback(
    {documents.map((doc) => (
   <div
     key={doc.id}
-    className={`flex items-center gap-2 px-4 py-2 rounded-lg mr-2 min-w-0 overflow-hidden transition-all duration-200 ${
-      editingTabId === doc.id
-        ? "w-36 max-w-36" // Wider during editing to accommodate larger input
-        : "w-28 max-w-28" // Normal size for non-editing
-    } ${
-      activeDocumentId === doc.id
-        ? "bg-background border-l-4 border-primary shadow-sm"
-        : "text-muted-foreground hover:bg-muted/80"
-    }`}
+    className={`flex items-center gap-2 px-4 py-2 rounded-lg mr-2 min-w-0 transition-all duration-200 ${editingTabId === doc.id ? "w-32 max-w-32 min-w-32" : "w-28 max-w-28 min-w-28"} ${activeDocumentId === doc.id ? "bg-background border-l-4 border-primary shadow-sm" : "text-muted-foreground hover:bg-muted/80"}`}
     onDoubleClick={() => startEditingTab(doc.id, doc.name)}
   >
     {editingTabId === doc.id ? (
@@ -313,7 +305,7 @@ const debouncedAddDocument = useCallback(
           if (e.key === "Enter") handleRename(doc.id);
           if (e.key === "Escape") setEditingTabId(null);
         }}
-        className="h-8 w-32 max-w-32 min-w-0 text-sm rounded-md border border-border focus:ring-2 focus:ring-primary overflow-hidden text-ellipsis whitespace-nowrap"
+        className="h-8 w-20 max-w-20 min-w-20 text-sm rounded-md border border-border focus:ring-2 focus:ring-primary overflow-hidden text-ellipsis whitespace-nowrap"
         autoFocus
         maxLength={20}
       />
