@@ -410,6 +410,8 @@ const getConnectionPoints = (node: Node) => {
       onMouseEnter={!readOnly ? () => setIsHovered(true) : undefined}
       onMouseLeave={!readOnly ? () => setIsHovered(false) : undefined}
       listening={!readOnly}
+      onTap={!readOnly ? handleClick : undefined}
+      onDblTap={!readOnly ? handleDoubleClick : undefined}
     >
       {renderShape()}
       

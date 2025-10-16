@@ -127,11 +127,19 @@ export const useDocumentStore = create<DocumentStore>()(
 
                 return response.json();
             };
-            const fetchDocument = async (id: string) => {
+            const fetchDocument = async (id: string): Promise<Document | null> => {
                 try {
-                    return await fetchWithAuth(`${API_BASE_URL}/api/documents/${id}`, { method: 'GET' });
-                } catch (error) {
-                    console.error('Error fetching document:', error);
+                    console.log(`Fetching document ID: ${id}`);
+                    const document = await fetchWithAuth(`${API_BASE_URL}/api/documents/${id}`, { method: 'GET' });
+                    return document;
+                } catch (error: any) {
+                    console.error(`Error fetching document ${id}:`, error.message);
+                    if (error.message.includes('Document not found') || error.message.includes('404')) {
+                        console.warn(`Document ${id} not found, clearing stale storage`);
+                        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+                        localStorage.removeItem(UNAUTHORIZED_STORAGE_KEY);
+                        get().reset();
+                    }
                     return null;
                 }
             };
@@ -431,23 +439,60 @@ export const useDocumentStore = create<DocumentStore>()(
 
                 },
                 setActiveDocument: async (id: string) => {
-                    const { documents } = get();
-                    if (!documents.some(doc => doc.id === id)) {
-                        console.warn(`Document ID ${id} not found, attempting to fetch`);
-                        const document = await fetchDocument(id);
-                        if (!document) {
-                            console.warn('Document not found, resetting to first document');
-                            set({ activeDocumentId: documents[0]?.id || null });
-                            return;
+                    const state = get();
+                    const { documents, syncUnauthorizedDocument } = state;
+
+                    try {
+                        // Step 1: Try to load unauthorized document safely
+                        const unauthorizedDoc = typeof loadUnauthorizedDocument === 'function'
+                            ? loadUnauthorizedDocument()
+                            : null;
+
+                        if (unauthorizedDoc && unauthorizedDoc.id === id) {
+                            console.log(`Syncing unauthorized document ${id} before setting as active`);
+
+                            if (typeof syncUnauthorizedDocument === 'function') {
+                                await syncUnauthorizedDocument();
+                            } else {
+                                console.warn('syncUnauthorizedDocument is not defined — skipping sync');
+                            }
+
+                            // Re-fetch latest state after sync (to avoid stale references)
+                            const updatedState = get();
+                            if (updatedState.documents?.some(doc => doc.id === id)) {
+                                set({ activeDocumentId: id });
+                                return;
+                            }
                         }
-                        set({
-                            documents: [...documents, document],
-                            activeDocumentId: id,
-                        });
-                    } else {
-                        set({ activeDocumentId: id });
+
+                        // Step 2: Handle case where document isn't in memory
+                        const currentDocuments = get().documents;
+                        if (!currentDocuments.some(doc => doc.id === id)) {
+                            console.warn(`Document ID ${id} not found, attempting to fetch`);
+                            const document = await fetchDocument(id);
+
+                            if (!document) {
+                                console.warn('Document not found, resetting to first document');
+                                set({ activeDocumentId: currentDocuments[0]?.id || null });
+                                return;
+                            }
+
+                            set({
+                                documents: [...currentDocuments, document],
+                                activeDocumentId: id,
+                            });
+                        } else {
+                            // Step 3: Normal path — document already exists
+                            set({ activeDocumentId: id });
+                        }
+                    } catch (error) {
+                        console.error(`Error in setActiveDocument for ID ${id}:`, error);
+                        // Optional: fail-safe fallback
+                        const fallbackDocs = get().documents;
+                        set({ activeDocumentId: fallbackDocs[0]?.id || null });
                     }
                 },
+
 
                 markUnsaved: (id: string) => {
                     set((state) => ({
@@ -750,12 +795,13 @@ export const useDocumentStore = create<DocumentStore>()(
                 syncUnauthorizedDocument: async () => {
                     const unauthorizedDoc = loadUnauthorizedDocument();
                     if (!unauthorizedDoc) {
-
+                        console.log('No unauthorized document to sync');
                         return;
                     }
+                    console.log('Syncing unauthorized document:', unauthorizedDoc.id);
                     const { isAuthenticated, token } = useAuthStore.getState();
                     if (!isAuthenticated || !token) {
-
+                        console.log('User not authenticated, skipping sync');
                         return;
                     }
                     try {
@@ -780,7 +826,7 @@ export const useDocumentStore = create<DocumentStore>()(
                             name: unauthorizedDoc.name,
                             state: validatedState,
                         };
-
+                        console.log('Checking document existence:', unauthorizedDoc.id);
                         const checkResponse = await fetch(`${API_BASE_URL}/api/documents/${unauthorizedDoc.id}`, {
                             method: 'GET',
                             headers: {
@@ -791,11 +837,15 @@ export const useDocumentStore = create<DocumentStore>()(
                         let method = 'POST';
                         if (checkResponse.ok) {
                             method = 'PUT';
-
+                            console.log('Document exists, using PUT');
+                        } else if (checkResponse.status === 404) {
+                            console.log('Document not found, using POST');
                         } else {
                             const errorData = await checkResponse.json();
+                            console.error('Error checking document existence:', errorData);
                             throw new Error(errorData.error || 'Failed to check document existence');
                         }
+                        console.log(`Saving document with ${method}:`, unauthorizedDoc.id);
                         const response = await fetch(`${API_BASE_URL}/api/documents`, {
                             method,
                             headers: {
@@ -806,10 +856,11 @@ export const useDocumentStore = create<DocumentStore>()(
                         });
                         if (!response.ok) {
                             const errorData = await response.json();
+                            console.error('Backend error response:', errorData);
                             throw new Error(errorData.error || 'Failed to sync unauthorized document');
                         }
                         const savedDocument = await response.json();
-
+                        console.log('Document synced successfully:', unauthorizedDoc.id);
                         set((state) => {
                             const existingDocIndex = state.documents.findIndex((doc) => doc.id === unauthorizedDoc.id);
                             let newDocuments = [...state.documents];
@@ -833,11 +884,12 @@ export const useDocumentStore = create<DocumentStore>()(
                             };
                         });
                         localStorage.removeItem(UNAUTHORIZED_STORAGE_KEY);
-
                     } catch (error) {
                         console.error('Failed to sync unauthorized document:', error);
                         set({ isAutoSaving: false });
-                        throw error;
+                        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+                        localStorage.removeItem(UNAUTHORIZED_STORAGE_KEY);
+                        get().reset();
                     }
                 },
             };

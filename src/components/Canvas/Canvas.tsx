@@ -51,6 +51,9 @@ const activeSelectedNodes = canvasState?.selectedNodes || selectedNodes;
 const [localViewport, setLocalViewport] = useState(activeViewport);
 const [localIsPanning, setLocalIsPanning] = useState(false);
 
+const lastDistRef = useRef<number>(0);
+const lastCenterRef = useRef<Point | null>(null);
+
 useEffect(() => {
   setLocalViewport(activeViewport);
 }, [activeViewport]);
@@ -66,6 +69,17 @@ const getEdgeColor = () => {
   const hsl = style.getPropertyValue('--connection-line').trim();
   const computedColor = `hsl(${hsl})`;
   return computedColor;
+};
+
+const getDistance = (p1: Touch, p2: Touch) => {
+  return Math.sqrt(Math.pow(p2.clientX - p1.clientX, 2) + Math.pow(p2.clientY - p1.clientY, 2));
+};
+
+const getCenter = (p1: Touch, p2: Touch): Point => {
+  return {
+    x: (p1.clientX + p2.clientX) / 2,
+    y: (p1.clientY + p2.clientY) / 2,
+  };
 };
 
 const handleMouseDown = (e: React.MouseEvent) => {
@@ -289,6 +303,134 @@ if (isDragConnecting) {
     }
   }, [setPanning, selectionBox, endSelectionBox, readOnly, canvasState]);
 
+const handleTouchStart = useCallback((e: Konva.KonvaEventObject<TouchEvent>) => {
+  e.evt.preventDefault(); // Prevent default browser behaviors like scroll/zoom
+  if (!stageRef.current) return;
+
+  const stage = stageRef.current;
+  const touches = e.evt.touches;
+
+  if (touches.length === 1) {
+    // Single touch: Start panning
+    const pos = stage.getPointerPosition();
+    if (pos) {
+      lastMousePos.current = pos;
+      if (readOnly || canvasState) {
+        setLocalIsPanning(true);
+      } else {
+        setPanning(true);
+      }
+      stage.container().style.cursor = 'move';
+    }
+  } else if (touches.length === 2) {
+    // Two touches: Start pinch zoom
+    const touch1 = touches[0];
+    const touch2 = touches[1];
+    lastCenterRef.current = getCenter(touch1, touch2);
+    lastDistRef.current = getDistance(touch1, touch2);
+  }
+}, [setPanning, readOnly, canvasState]);
+
+const handleTouchMove = useCallback((e: Konva.KonvaEventObject<TouchEvent>) => {
+  e.evt.preventDefault();
+  if (!stageRef.current) return;
+
+  const stage = stageRef.current;
+  const touches = e.evt.touches;
+
+  if (touches.length === 1 && ((readOnly || canvasState) ? localIsPanning : isPanning)) {
+    // Single touch move: Pan
+    const pos = stage.getPointerPosition();
+    if (pos && lastMousePos.current) {
+      const delta = {
+        x: pos.x - lastMousePos.current.x,
+        y: pos.y - lastMousePos.current.y,
+      };
+      if (readOnly || canvasState) {
+        localPan(delta);
+      } else {
+        pan(delta);
+      }
+      lastMousePos.current = pos;
+    }
+  } else if (touches.length === 2) {
+    // Two touch move: Pinch zoom
+    const touch1 = touches[0];
+    const touch2 = touches[1];
+    const newCenter = getCenter(touch1, touch2);
+    const newDist = getDistance(touch1, touch2);
+
+    if (lastDistRef.current !== 0) {
+      const delta = (newDist - lastDistRef.current) / lastDistRef.current;
+      const currentViewport = (readOnly || canvasState) ? localViewport : viewport;
+      const setFunc = (readOnly || canvasState) ? setLocalViewport : setViewport;
+
+      const pointTo = {
+        x: (newCenter.x - currentViewport.x) / currentViewport.scale,
+        y: (newCenter.y - currentViewport.y) / currentViewport.scale,
+      };
+
+      const newScale = Math.max(0.25, Math.min(2, currentViewport.scale * (1 + delta * 2))); // Amplify delta for smoother mobile zoom
+
+      const newX = newCenter.x - pointTo.x * newScale;
+      const newY = newCenter.y - pointTo.y * newScale;
+
+      setFunc({ x: newX, y: newY, scale: newScale });
+    }
+
+    lastDistRef.current = newDist;
+    lastCenterRef.current = newCenter;
+  }
+
+  // Handle drag connection if in normal mode
+  if (!(readOnly || canvasState)) {
+    const { isDragConnecting } = useCanvasStore.getState();
+    if (isDragConnecting) {
+      const pos = stage.getPointerPosition();
+      if (pos) {
+        const worldPos = {
+          x: (pos.x - viewport.x) / viewport.scale,
+          y: (pos.y - viewport.y) / viewport.scale,
+        };
+        useCanvasStore.getState().updateTempTarget(worldPos);
+        stage.batchDraw();
+      }
+    }
+  }
+}, [isPanning, localIsPanning, viewport, localViewport, pan, localPan, setViewport, readOnly, canvasState]);
+
+const handleTouchEnd = useCallback((e: Konva.KonvaEventObject<TouchEvent>) => {
+  e.evt.preventDefault();
+  if (readOnly || canvasState) {
+    setLocalIsPanning(false);
+  } else {
+    setPanning(false);
+  }
+  lastMousePos.current = null;
+  lastDistRef.current = 0;
+  lastCenterRef.current = null;
+
+  if (stageRef.current) {
+    stageRef.current.container().style.cursor = 'default';
+  }
+
+  // End drag connection if applicable (normal mode only)
+  if (!(readOnly || canvasState)) {
+    const { isDragConnecting, endDragConnection } = useCanvasStore.getState();
+    if (isDragConnecting) {
+      let targetNodeId: string | null = null;
+      const target = e.target.findAncestor((node: Konva.Node) => node.name() === 'node');
+      if (target) {
+        targetNodeId = target.id();
+      }
+      endDragConnection(targetNodeId);
+    }
+    if (selectionBox?.active) {
+      endSelectionBox();
+    }
+  }
+}, [setPanning, selectionBox, endSelectionBox, readOnly, canvasState]);
+
 useEffect(() => {
   if (stageRef.current) {
    stageRef.current.position({ x: localViewport.x, y: localViewport.y });
@@ -318,6 +460,9 @@ useEffect(() => {
        onContextMenu={(e) => { e.evt.preventDefault(); e.evt.stopPropagation(); }}
         // draggable={false}
        listening={true}
+       onTouchStart={handleTouchStart}
+onTouchMove={handleTouchMove}
+onTouchEnd={handleTouchEnd}
       >
        <Layer key={`layer-${isDark ? 'dark' : 'light'}`}>
   {(() => {
