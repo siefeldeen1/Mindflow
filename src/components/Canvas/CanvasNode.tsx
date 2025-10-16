@@ -312,14 +312,58 @@ const getConnectionPoints = (node: Node) => {
   const h = node.size.height;
   const cx = w / 2;
   const cy = h / 2;
-  return [
-    { x: cx, y: 0 }, // top
-    { x: w, y: cy }, // right
-    { x: cx, y: h }, // bottom
-    { x: 0, y: cy }, // left
-  ].filter(point => 
-    point.x >= 0 && point.x <= w && point.y >= 0 && point.y <= h
-  );
+  let points: Point[] = [];
+
+  switch (node.type) {
+    case 'rectangle':
+    case 'text':
+      points = [
+        { x: cx, y: 0 }, // top
+        { x: w, y: cy }, // right
+        { x: cx, y: h }, // bottom
+        { x: 0, y: cy }, // left
+      ];
+      break;
+    case 'ellipse':
+      // Points on ellipse perimeter (using parametric angles)
+      const angles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]; // right, bottom, left, top
+      points = angles.map((angle) => ({
+        x: cx + (w / 2) * Math.cos(angle),
+        y: cy + (h / 2) * Math.sin(angle),
+      }));
+      break;
+    case 'diamond':
+      // Points at diamond vertices
+      points = [
+        { x: cx, y: 0 }, // top
+        { x: w, y: cy }, // right
+        { x: cx, y: h }, // bottom
+        { x: 0, y: cy }, // left
+      ];
+      break;
+    default:
+      points = [
+        { x: cx, y: 0 },
+        { x: w, y: cy },
+        { x: cx, y: h },
+        { x: 0, y: cy },
+      ];
+  }
+
+  // Apply padding to avoid text overlap
+  return points.map((point) => {
+    const dx = point.x - cx;
+    const dy = point.y - cy;
+    const length = Math.hypot(dx, dy);
+    if (length === 0) return point;
+    const padding = TEXT_NODE_PADDING;
+    const nx = dx / length;
+    const ny = dy / length;
+    return {
+      x: point.x + nx * padding,
+      y: point.y + ny * padding,
+    };
+  });
 };
 
   const renderShape = () => {
@@ -418,10 +462,10 @@ const getConnectionPoints = (node: Node) => {
       <Text
   ref={textRef}
   text={node.text || 'Text'}
-  x={0}
-  y={0}
-  width={node.size.width}
-  height={node.size.height}
+  x={TEXT_NODE_PADDING}
+  y={TEXT_NODE_PADDING}
+  width={node.size.width - 2 * TEXT_NODE_PADDING}
+  height={node.size.height - 2 * TEXT_NODE_PADDING}
   align="center"
   verticalAlign="middle"
   fontSize={14}

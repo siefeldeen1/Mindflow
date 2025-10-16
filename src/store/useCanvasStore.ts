@@ -142,35 +142,44 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
     const nx = dx / dist;
     const ny = dy / dist;
 
+    let anchorX = fromCenter.x;
+    let anchorY = fromCenter.y;
+
     switch (fromNode.type) {
       case 'rectangle':
       case 'text':
         const halfWidth = fromNode.size.width / 2;
         const halfHeight = fromNode.size.height / 2;
-        const tRect = 1 / (Math.abs(nx / halfWidth) + Math.abs(ny / halfHeight));
-        return {
-          x: fromCenter.x + tRect * nx,
-          y: fromCenter.y + tRect * ny,
-        };
+        const tRect = Math.min(
+          halfWidth / (Math.abs(nx) || 1e-10),
+          halfHeight / (Math.abs(ny) || 1e-10)
+        );
+        anchorX += tRect * nx;
+        anchorY += tRect * ny;
+        break;
       case 'ellipse':
         const a = fromNode.size.width / 2;
         const b = fromNode.size.height / 2;
-        const theta = Math.atan2(dy, dx);
-        return {
-          x: fromCenter.x + a * Math.cos(theta),
-          y: fromCenter.y + b * Math.sin(theta),
-        };
+        const tEllipse = 1 / Math.sqrt(Math.pow(nx / a, 2) + Math.pow(ny / b, 2));
+        anchorX += tEllipse * nx;
+        anchorY += tEllipse * ny;
+        break;
       case 'diamond':
         const w = fromNode.size.width / 2;
         const h = fromNode.size.height / 2;
-        const tDiamond = 1 / (Math.abs(nx / w) + Math.abs(ny / h));
-        return {
-          x: fromCenter.x + tDiamond * nx,
-          y: fromCenter.y + tDiamond * ny,
-        };
+        const tDiamond = 1 / (Math.abs(nx / w) + Math.abs(ny / h) || 1e-10);
+        anchorX += tDiamond * nx;
+        anchorY += tDiamond * ny;
+        break;
       default:
-        return fromCenter;
+        break;
     }
+
+    // Optional: Add outward padding to avoid text/arrowhead overlap
+    anchorX += nx * TEXT_NODE_PADDING;
+    anchorY += ny * TEXT_NODE_PADDING;
+
+    return { x: anchorX, y: anchorY };
   };
 
   const updateConnectedEdges = (nodeId: string) => {
@@ -248,35 +257,45 @@ export const useCanvasStore = create<CanvasStore>((set, get) => {
       if (dist === 0) return fromCenter;
       const nx = dx / dist;
       const ny = dy / dist;
+
+      let anchorX = fromCenter.x;
+      let anchorY = fromCenter.y;
+
       switch (node.type) {
         case 'rectangle':
         case 'text':
           const halfWidth = node.size.width / 2;
           const halfHeight = node.size.height / 2;
-          const tRect = 1 / (Math.abs(nx / halfWidth) + Math.abs(ny / halfHeight));
-          return {
-            x: fromCenter.x + tRect * nx,
-            y: fromCenter.y + tRect * ny,
-          };
+          const tRect = Math.min(
+            halfWidth / (Math.abs(nx) || 1e-10),
+            halfHeight / (Math.abs(ny) || 1e-10)
+          );
+          anchorX += tRect * nx;
+          anchorY += tRect * ny;
+          break;
         case 'ellipse':
           const a = node.size.width / 2;
           const b = node.size.height / 2;
-          const theta = Math.atan2(dy, dx);
-          return {
-            x: fromCenter.x + a * Math.cos(theta),
-            y: fromCenter.y + b * Math.sin(theta),
-          };
+          const tEllipse = 1 / Math.sqrt(Math.pow(nx / a, 2) + Math.pow(ny / b, 2));
+          anchorX += tEllipse * nx;
+          anchorY += tEllipse * ny;
+          break;
         case 'diamond':
           const w = node.size.width / 2;
           const h = node.size.height / 2;
-          const tDiamond = 1 / (Math.abs(nx / w) + Math.abs(ny / h));
-          return {
-            x: fromCenter.x + tDiamond * nx,
-            y: fromCenter.y + tDiamond * ny,
-          };
+          const tDiamond = 1 / (Math.abs(nx / w) + Math.abs(ny / h) || 1e-10);
+          anchorX += tDiamond * nx;
+          anchorY += tDiamond * ny;
+          break;
         default:
-          return fromCenter;
+          break;
       }
+
+      // Optional: Add outward padding to avoid text/arrowhead overlap
+      anchorX += nx * TEXT_NODE_PADDING;
+      anchorY += ny * TEXT_NODE_PADDING;
+
+      return { x: anchorX, y: anchorY };
     },
     startDragConnection: (nodeId: string, initialPos: Point) => {
       set({

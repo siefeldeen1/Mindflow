@@ -515,7 +515,54 @@ onTouchEnd={handleTouchEnd}
   {(() => {
     const { isDragConnecting, connectionSource, tempTarget, getTempAnchor } = useCanvasStore.getState();
     if (!canvasState && isDragConnecting && connectionSource && tempTarget) {
-      const sourceAnchor = getTempAnchor(connectionSource, tempTarget);
+      const sourceNode = activeNodes.find((n) => n.id === connectionSource);
+    if (!sourceNode) return null;
+    
+    // Calculate the source anchor on the perimeter
+    const cx = sourceNode.position.x + sourceNode.size.width / 2;
+    const cy = sourceNode.position.y + sourceNode.size.height / 2;
+    const dx = tempTarget.x - cx;
+    const dy = tempTarget.y - cy;
+    const length = Math.hypot(dx, dy);
+    let sourceAnchor: Point = { x: cx, y: cy };
+    
+    if (length > 0) {
+      const nx = dx / length;
+      const ny = dy / length;
+      let anchorX = cx;
+      let anchorY = cy;
+      const padding = 10;
+      
+      if (sourceNode.type === 'ellipse') {
+        const rx = sourceNode.size.width / 2;
+        const ry = sourceNode.size.height / 2;
+        const angle = Math.atan2(dy, dx);
+        anchorX = cx + rx * Math.cos(angle) + nx * padding;
+        anchorY = cy + ry * Math.sin(angle) + ny * padding;
+      } else if (sourceNode.type === 'diamond') {
+        const w = sourceNode.size.width;
+        const h = sourceNode.size.height;
+        // Find intersection with diamond edges
+        const t = Math.min(
+          (w / 2) / Math.abs(dx),
+          (h / 2) / Math.abs(dy)
+        );
+        anchorX = cx + t * dx + nx * padding;
+        anchorY = cy + t * dy + ny * padding;
+      } else {
+        // Rectangle or text
+        const w = sourceNode.size.width;
+        const h = sourceNode.size.height;
+        const t = Math.min(
+          (w / 2) / Math.abs(dx),
+          (h / 2) / Math.abs(dy)
+        );
+        anchorX = cx + t * dx + nx * padding;
+        anchorY = cy + t * dy + ny * padding;
+      }
+      sourceAnchor = { x: anchorX, y: anchorY };
+    }
+      
       return (
         <Arrow
           key="temp-line"
