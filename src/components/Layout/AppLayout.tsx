@@ -191,23 +191,26 @@ useEffect(() => {
     }
     setEditingTabId(null);
   };
-const debouncedAddDocument = useCallback(
-    debounce(() => {
-      if (!useAuthStore.getState().isAuthenticated) {
-        const notification = document.createElement("div");
-        notification.className =
-          "fixed top-6 left-1/2 transform -translate-x-1/2 bg-primary text-primary-foreground px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-down border border-primary/20";
-        notification.textContent = "Please log in to create a new tab";
-        document.body.appendChild(notification);
-        setTimeout(() => {
-          document.body.removeChild(notification);
-        }, 3000);
-        return;
-      }
-      addDocument();
-    }, 500),
-    [addDocument]
-  );
+const debouncedAddDocument = useCallback(() => {
+  if ((debouncedAddDocument as any).isCooldown) return;
+
+  if (!useAuthStore.getState().isAuthenticated) {
+    const notification = document.createElement("div");
+    notification.className =
+      "fixed top-6 left-1/2 transform -translate-x-1/2 bg-primary text-primary-foreground px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-down border border-primary/20";
+    notification.textContent = "Please log in to create a new tab";
+    document.body.appendChild(notification);
+    setTimeout(() => {
+      document.body.removeChild(notification);
+    }, 3000);
+    return;
+  }
+
+  addDocument();
+  (debouncedAddDocument as any).isCooldown = true;
+  setTimeout(() => ((debouncedAddDocument as any).isCooldown = false), 2000);
+}, [addDocument]);
+
   // Filter tabs for search
   const filteredOpenTabs = documents.filter((doc) =>
     doc.name.toLowerCase().includes(searchQuery.toLowerCase())
