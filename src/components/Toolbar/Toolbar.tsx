@@ -438,21 +438,22 @@ const handleShare = async () => {
     variant="ghost"
     size="sm"
     onClick={() => {
-      if (readOnly) {
-        setShowNotification('Cannot duplicate in read-only mode');
-        return;
-      }
-      const { selectedNodes, duplicateNode } = useCanvasStore.getState();
-      if (selectedNodes.length === 1) {
-        duplicateNode(selectedNodes[0]);
-        setShowNotification('Node duplicated');
-      } else {
-        setShowNotification('Select exactly one node to duplicate');
-      }
-    }}
-    disabled={useCanvasStore.getState().selectedNodes.length !== 1 || readOnly}
+  if (readOnly) {
+    setShowNotification('Cannot duplicate in read-only mode');
+    return;
+  }
+  const { selectedNodes, duplicateNode } = useCanvasStore.getState();
+  if (selectedNodes.length > 0) {
+    selectedNodes.forEach(id => duplicateNode(id));
+    const message = selectedNodes.length === 1 ? 'Node duplicated' : 'Nodes duplicated';
+    setShowNotification(message);
+  } else {
+    setShowNotification('Select at least one node to duplicate');
+  }
+}}
+    disabled={useCanvasStore.getState().selectedNodes.length === 0 || readOnly}
     className="w-9 h-9 p-0"
-    title="Duplicate Selected Node"
+    title="Duplicate Selected Node(s)"
   >
     <Copy className="w-4 h-4" />
   </Button>
@@ -460,21 +461,22 @@ const handleShare = async () => {
     variant="ghost"
     size="sm"
     onClick={() => {
-      if (readOnly) {
-        setShowNotification('Cannot delete in read-only mode');
-        return;
-      }
-      const { selectedNodes, deleteNode } = useCanvasStore.getState();
-      if (selectedNodes.length === 1) {
-        deleteNode(selectedNodes[0]);
-        setShowNotification('Node deleted');
-      } else {
-        setShowNotification('Select exactly one node to delete');
-      }
-    }}
-    disabled={useCanvasStore.getState().selectedNodes.length !== 1 || readOnly}
+  if (readOnly) {
+    setShowNotification('Cannot delete in read-only mode');
+    return;
+  }
+  const { selectedNodes, deleteNode } = useCanvasStore.getState();
+  if (selectedNodes.length > 0) {
+    selectedNodes.forEach(id => deleteNode(id));
+    const message = selectedNodes.length === 1 ? 'Node deleted' : 'Nodes deleted';
+    setShowNotification(message);
+  } else {
+    setShowNotification('Select at least one node to delete');
+  }
+}}
+    disabled={useCanvasStore.getState().selectedNodes.length === 0 || readOnly}
     className="w-9 h-9 p-0"
-    title="Delete Selected Node"
+    title="Delete Selected Node(s)"
   >
     <Trash className="w-4 h-4" />
   </Button>
