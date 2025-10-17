@@ -243,9 +243,16 @@ const debouncedAddDocument = useCallback(() => {
     <div className="h-screen flex flex-col bg-background text-foreground transition-colors duration-300">
       <header className="shrink-0 bg-card shadow-md">
         <div className="px-6 py-4 flex items-center justify-between border-b border-border">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/50 bg-clip-text text-transparent">
-            Mind Map Editor
+     <div className="flex items-center space-x-2">
+            {/* <img
+              src="/mindflow.svg"
+              alt="MindFlow logo"
+              className="w-8 h-8 text-black dark:text-white fill-current"
+            /> */}
+            <h1 className="text-2xl font-bold text-primary bg-clip-text ">
+            MindFlow
           </h1>
+        </div>
           <div className="flex items-center gap-2">
             {readOnly && (
               <Button
