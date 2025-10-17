@@ -224,7 +224,16 @@ const { isDark } = useThemeStore();
     editor.style.height = `${newHeight * viewport.scale}px`;
 
     // Vertically center editor relative to node
-    editor.style.top = `${stageBox.top + textPosition.y + (node.size.height * viewport.scale) / 2 - (newHeight * viewport.scale) / 2}px`;
+    editor.style.top = `${
+  stageBox.top +
+  textPosition.y -
+  TEXT_NODE_PADDING * viewport.scale
+}px`;
+editor.style.left = `${
+  stageBox.left +
+  textPosition.x -
+  TEXT_NODE_PADDING * viewport.scale
+}px`;
 
     // Sync node data
     updateNodeSync(node.id, {
