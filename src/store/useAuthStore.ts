@@ -51,6 +51,7 @@ export const useAuthStore = create<AuthStore>()(
       },
       login: async (email: string, password: string, activeDocId: string) => {
         try {
+          set({ isLoading: true });
           const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -113,6 +114,7 @@ export const useAuthStore = create<AuthStore>()(
       },
       register: async (email: string, password: string, name: string, activeDocId: string) => {
         try {
+          set({ isLoading: true });
           const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -178,11 +180,13 @@ export const useAuthStore = create<AuthStore>()(
 
       },
       loginWithSupabase: async (activeDocId: string) => {
+        set({ isLoading: true });
         sessionStorage.setItem('activeDocId', activeDocId);
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
         });
         if (error) throw error;
+        set({ isLoading: false });
       },
 
       handleSupabaseSession: async () => {
@@ -248,13 +252,14 @@ export const useAuthStore = create<AuthStore>()(
               await documentStore.loadDocuments();
             }
 
-            // --- ✅ END FULL DOCUMENT SYNC LOGIC ---
+
           } finally {
             // NEW: End post-login loading
             get().setIsLoading(false);
           }
         } catch (err: any) {
           console.error('Supabase session error:', err.message);
+          set({ isLoading: false });
         }
       },
 
