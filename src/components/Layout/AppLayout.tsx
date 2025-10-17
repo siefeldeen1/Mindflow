@@ -33,7 +33,7 @@ export const AppLayout: React.FC = () => {
     renameDocument,
     unsavedChanges,
   } = useDocumentStore();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated,isLoading: authLoading } = useAuthStore();
   const { loadCanvas, clear, selectedNodes, showPropertyPanel, setShowPropertyPanel } = useCanvasStore();
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [tabName, setTabName] = useState<string>("");
@@ -46,7 +46,7 @@ const [readOnly, setReadOnly] = useState<boolean>(false); // New state for read-
   const [shareNotification, setShareNotification] = useState<string | null>(null); // For share mode feedback
   const [searchParams, setSearchParams] = useSearchParams();
   const [sharedCanvasState, setSharedCanvasState] = useState<CanvasState | null>(null);
-  const {  } = useAuthStore();
+  
 useEffect(() => {
   const encryptedId = searchParams.get('share');
   if (encryptedId) {
@@ -594,6 +594,14 @@ const debouncedAddDocument = useCallback(() => {
           </Button>
         )}
       </div>
+      {authLoading && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-card p-6 rounded-lg shadow-lg flex flex-col items-center gap-4">
+      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /> {/* Simple spinner */}
+      <p className="text-foreground font-medium">Completing login and loading documents...</p>
+    </div>
+  </div>
+)}
     </div>
   );
 };

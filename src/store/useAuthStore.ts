@@ -26,6 +26,8 @@ interface AuthStore {
   logout: () => void;
   loginWithSupabase: (activeDocId: string) => Promise<void>;
   handleSupabaseSession: () => Promise<void>;
+  isLoading: boolean;
+  setIsLoading: (loading: boolean) => void;
 }
 
 
@@ -37,11 +39,15 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      isLoading: false,
       setUser: (user: User | null) => {
         set({ user, isAuthenticated: !!user });
       },
       setToken: (token: string | null) => {
         set({ token });
+      },
+      setIsLoading: (loading: boolean) => { // NEW: Setter
+        set({ isLoading: loading });
       },
       login: async (email: string, password: string, activeDocId: string) => {
         try {
@@ -59,39 +65,46 @@ export const useAuthStore = create<AuthStore>()(
           const data = await response.json();
           set({ user: data.user, token: data.token, isAuthenticated: true });
 
-          const documentStore = useDocumentStore.getState();
-          const activeDoc = documentStore.documents.find((doc) => doc.id === activeDocId);
-          if (activeDoc && documentStore.unsavedChanges.includes(activeDoc.id)) {
-            const state: CanvasState = {
-              nodes: Array.isArray(activeDoc.state.nodes) ? activeDoc.state.nodes : [],
-              edges: Array.isArray(activeDoc.state.edges) ? activeDoc.state.edges : [],
-              selectedNodes: Array.isArray(activeDoc.state.selectedNodes) ? activeDoc.state.selectedNodes : [],
-              selectedEdges: Array.isArray(activeDoc.state.selectedEdges) ? activeDoc.state.selectedEdges : [],
-              viewport: activeDoc.state.viewport || { x: 0, y: 0, scale: 1 },
-              tool: activeDoc.state.tool || 'select',
-              isConnecting: activeDoc.state.isConnecting || false,
-              connectionSource: activeDoc.state.connectionSource || null,
-              history: Array.isArray(activeDoc.state.history) ? activeDoc.state.history : [],
-              historyIndex: activeDoc.state.historyIndex || -1,
-              isDragging: activeDoc.state.isDragging || false,
-              isPanning: activeDoc.state.isPanning || false,
-              selectionBox: activeDoc.state.selectionBox || null,
-            };
+          // NEW: Start post-login loading
+          get().setIsLoading(true);
+          try {
+            const documentStore = useDocumentStore.getState();
+            const activeDoc = documentStore.documents.find((doc) => doc.id === activeDocId);
+            if (activeDoc && documentStore.unsavedChanges.includes(activeDoc.id)) {
+              const state: CanvasState = {
+                nodes: Array.isArray(activeDoc.state.nodes) ? activeDoc.state.nodes : [],
+                edges: Array.isArray(activeDoc.state.edges) ? activeDoc.state.edges : [],
+                selectedNodes: Array.isArray(activeDoc.state.selectedNodes) ? activeDoc.state.selectedNodes : [],
+                selectedEdges: Array.isArray(activeDoc.state.selectedEdges) ? activeDoc.state.selectedEdges : [],
+                viewport: activeDoc.state.viewport || { x: 0, y: 0, scale: 1 },
+                tool: activeDoc.state.tool || 'select',
+                isConnecting: activeDoc.state.isConnecting || false,
+                connectionSource: activeDoc.state.connectionSource || null,
+                history: Array.isArray(activeDoc.state.history) ? activeDoc.state.history : [],
+                historyIndex: activeDoc.state.historyIndex || -1,
+                isDragging: activeDoc.state.isDragging || false,
+                isPanning: activeDoc.state.isPanning || false,
+                selectionBox: activeDoc.state.selectionBox || null,
+              };
 
-            await documentStore.saveDocument(activeDoc.id, state);
-            sessionStorage.removeItem('temp-document');
-            await documentStore.syncUnauthorizedDocument();
-            await documentStore.loadDocuments();
-            setTimeout(() => {
-              documentStore.setActiveDocument(activeDoc.id);
+              await documentStore.saveDocument(activeDoc.id, state);
+              sessionStorage.removeItem('temp-document');
+              await documentStore.syncUnauthorizedDocument();
+              await documentStore.loadDocuments();
+              setTimeout(() => {
+                documentStore.setActiveDocument(activeDoc.id);
 
-              const updatedDoc = documentStore.documents.find((doc) => doc.id === activeDoc.id);
+                const updatedDoc = documentStore.documents.find((doc) => doc.id === activeDoc.id);
 
-            }, 0);
-          } else {
-            await documentStore.syncUnauthorizedDocument();
-            await documentStore.loadDocuments();
+              }, 0);
+            } else {
+              await documentStore.syncUnauthorizedDocument();
+              await documentStore.loadDocuments();
 
+            }
+          } finally {
+            // NEW: End post-login loading
+            get().setIsLoading(false);
           }
         } catch (error: any) {
           console.error('Login error:', error);
@@ -114,39 +127,46 @@ export const useAuthStore = create<AuthStore>()(
           const data = await response.json();
           set({ user: data.user, token: data.token, isAuthenticated: true });
 
-          const documentStore = useDocumentStore.getState();
-          const activeDoc = documentStore.documents.find((doc) => doc.id === activeDocId);
-          if (activeDoc && documentStore.unsavedChanges.includes(activeDoc.id)) {
-            const state: CanvasState = {
-              nodes: Array.isArray(activeDoc.state.nodes) ? activeDoc.state.nodes : [],
-              edges: Array.isArray(activeDoc.state.edges) ? activeDoc.state.edges : [],
-              selectedNodes: Array.isArray(activeDoc.state.selectedNodes) ? activeDoc.state.selectedNodes : [],
-              selectedEdges: Array.isArray(activeDoc.state.selectedEdges) ? activeDoc.state.selectedEdges : [],
-              viewport: activeDoc.state.viewport || { x: 0, y: 0, scale: 1 },
-              tool: activeDoc.state.tool || 'select',
-              isConnecting: activeDoc.state.isConnecting || false,
-              connectionSource: activeDoc.state.connectionSource || null,
-              history: Array.isArray(activeDoc.state.history) ? activeDoc.state.history : [],
-              historyIndex: activeDoc.state.historyIndex || -1,
-              isDragging: activeDoc.state.isDragging || false,
-              isPanning: activeDoc.state.isPanning || false,
-              selectionBox: activeDoc.state.selectionBox || null,
-            };
+          // NEW: Start post-login loading
+          get().setIsLoading(true);
+          try {
+            const documentStore = useDocumentStore.getState();
+            const activeDoc = documentStore.documents.find((doc) => doc.id === activeDocId);
+            if (activeDoc && documentStore.unsavedChanges.includes(activeDoc.id)) {
+              const state: CanvasState = {
+                nodes: Array.isArray(activeDoc.state.nodes) ? activeDoc.state.nodes : [],
+                edges: Array.isArray(activeDoc.state.edges) ? activeDoc.state.edges : [],
+                selectedNodes: Array.isArray(activeDoc.state.selectedNodes) ? activeDoc.state.selectedNodes : [],
+                selectedEdges: Array.isArray(activeDoc.state.selectedEdges) ? activeDoc.state.selectedEdges : [],
+                viewport: activeDoc.state.viewport || { x: 0, y: 0, scale: 1 },
+                tool: activeDoc.state.tool || 'select',
+                isConnecting: activeDoc.state.isConnecting || false,
+                connectionSource: activeDoc.state.connectionSource || null,
+                history: Array.isArray(activeDoc.state.history) ? activeDoc.state.history : [],
+                historyIndex: activeDoc.state.historyIndex || -1,
+                isDragging: activeDoc.state.isDragging || false,
+                isPanning: activeDoc.state.isPanning || false,
+                selectionBox: activeDoc.state.selectionBox || null,
+              };
 
-            await documentStore.saveDocument(activeDoc.id, state);
-            sessionStorage.removeItem('temp-document');
-            await documentStore.syncUnauthorizedDocument();
-            await documentStore.loadDocuments();
-            setTimeout(() => {
-              documentStore.setActiveDocument(activeDoc.id);
+              await documentStore.saveDocument(activeDoc.id, state);
+              sessionStorage.removeItem('temp-document');
+              await documentStore.syncUnauthorizedDocument();
+              await documentStore.loadDocuments();
+              setTimeout(() => {
+                documentStore.setActiveDocument(activeDoc.id);
 
-              const updatedDoc = documentStore.documents.find((doc) => doc.id === activeDoc.id);
+                const updatedDoc = documentStore.documents.find((doc) => doc.id === activeDoc.id);
 
-            }, 0);
-          } else {
-            await documentStore.syncUnauthorizedDocument();
-            await documentStore.loadDocuments();
+              }, 0);
+            } else {
+              await documentStore.syncUnauthorizedDocument();
+              await documentStore.loadDocuments();
 
+            }
+          } finally {
+            // NEW: End post-login loading
+            get().setIsLoading(false);
           }
         } catch (error: any) {
           console.error('Registration error:', error);
@@ -193,44 +213,50 @@ export const useAuthStore = create<AuthStore>()(
           localStorage.setItem('user', JSON.stringify(user));
           localStorage.setItem('token', backendToken);
 
-          // --- 🔹 FULL DOCUMENT SYNC LOGIC ---
-          const activeDoc = documentStore.documents.find((doc) => doc.id === activeDocId);
-          if (activeDoc && documentStore.unsavedChanges.includes(activeDoc.id)) {
-            const state: CanvasState = {
-              nodes: Array.isArray(activeDoc.state.nodes) ? activeDoc.state.nodes : [],
-              edges: Array.isArray(activeDoc.state.edges) ? activeDoc.state.edges : [],
-              selectedNodes: Array.isArray(activeDoc.state.selectedNodes) ? activeDoc.state.selectedNodes : [],
-              selectedEdges: Array.isArray(activeDoc.state.selectedEdges) ? activeDoc.state.selectedEdges : [],
-              viewport: activeDoc.state.viewport || { x: 0, y: 0, scale: 1 },
-              tool: activeDoc.state.tool || 'select',
-              isConnecting: activeDoc.state.isConnecting || false,
-              connectionSource: activeDoc.state.connectionSource || null,
-              history: Array.isArray(activeDoc.state.history) ? activeDoc.state.history : [],
-              historyIndex: activeDoc.state.historyIndex || -1,
-              isDragging: activeDoc.state.isDragging || false,
-              isPanning: activeDoc.state.isPanning || false,
-              selectionBox: activeDoc.state.selectionBox || null,
-            };
+          // NEW: Start post-login loading
+          get().setIsLoading(true);
+          try {
+            // --- 🔹 FULL DOCUMENT SYNC LOGIC ---
+            const activeDoc = documentStore.documents.find((doc) => doc.id === activeDocId);
+            if (activeDoc && documentStore.unsavedChanges.includes(activeDoc.id)) {
+              const state: CanvasState = {
+                nodes: Array.isArray(activeDoc.state.nodes) ? activeDoc.state.nodes : [],
+                edges: Array.isArray(activeDoc.state.edges) ? activeDoc.state.edges : [],
+                selectedNodes: Array.isArray(activeDoc.state.selectedNodes) ? activeDoc.state.selectedNodes : [],
+                selectedEdges: Array.isArray(activeDoc.state.selectedEdges) ? activeDoc.state.selectedEdges : [],
+                viewport: activeDoc.state.viewport || { x: 0, y: 0, scale: 1 },
+                tool: activeDoc.state.tool || 'select',
+                isConnecting: activeDoc.state.isConnecting || false,
+                connectionSource: activeDoc.state.connectionSource || null,
+                history: Array.isArray(activeDoc.state.history) ? activeDoc.state.history : [],
+                historyIndex: activeDoc.state.historyIndex || -1,
+                isDragging: activeDoc.state.isDragging || false,
+                isPanning: activeDoc.state.isPanning || false,
+                selectionBox: activeDoc.state.selectionBox || null,
+              };
 
-            await documentStore.saveDocument(activeDoc.id, state);
-            sessionStorage.removeItem('temp-document');
-            await documentStore.syncUnauthorizedDocument();
-            await documentStore.loadDocuments();
+              await documentStore.saveDocument(activeDoc.id, state);
+              sessionStorage.removeItem('temp-document');
+              await documentStore.syncUnauthorizedDocument();
+              await documentStore.loadDocuments();
 
-            setTimeout(() => {
-              documentStore.setActiveDocument(activeDoc.id);
-            }, 0);
-          } else {
-            await documentStore.syncUnauthorizedDocument();
-            await documentStore.loadDocuments();
+              setTimeout(() => {
+                documentStore.setActiveDocument(activeDoc.id);
+              }, 0);
+            } else {
+              await documentStore.syncUnauthorizedDocument();
+              await documentStore.loadDocuments();
+            }
+
+            // --- ✅ END FULL DOCUMENT SYNC LOGIC ---
+          } finally {
+            // NEW: End post-login loading
+            get().setIsLoading(false);
           }
-
-          // --- ✅ END FULL DOCUMENT SYNC LOGIC ---
         } catch (err: any) {
           console.error('Supabase session error:', err.message);
         }
       },
-
 
     }),
     {
